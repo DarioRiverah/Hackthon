@@ -1,0 +1,97 @@
+{% extends partial_base %}
+{% from "_macros.html" import alert %}
+{% block title %}Datos -- {{ current_store }}{% endblock %}
+
+{% block sidebar_nav %}
+<nav class="tabs-nav">
+    <a href="{{ url_for('main.results', store=current_store) }}" class="tab-btn"><i data-lucide="layout-dashboard" class="icon"></i> Volver al panel</a>
+    <a href="{{ url_for('main.datos_camara', store=current_store) }}" class="tab-btn active"><i data-lucide="database" class="icon"></i> Datos</a>
+</nav>
+{% endblock %}
+
+{% block content %}
+<p class="caption">Espacio en disco y eliminación de datos de <strong>{{ current_store }}</strong>. Todas las
+acciones de esta página son destructivas y piden confirmación explícita -- ninguna borra nada con un solo clic.</p>
+
+<div class="panel">
+    <h4><i data-lucide="video" class="icon"></i> Video(s) crudo(s)</h4>
+    {% if not raw_videos %}
+    {% call alert('info') %}No hay ningún video crudo asociado a esta cámara en data/raw/.{% endcall %}
+    {% else %}
+    <table class="data-table" style="margin-bottom:var(--space-4);">
+        <thead><tr><th>Archivo</th><th>Tamaño</th></tr></thead>
+        <tbody>
+            {% for v in raw_videos %}
+            <tr><td>{{ v.path }}</td><td>{{ v.size_mb }} MB</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <button class="btn btn-danger" id="btn-eliminar-video"><i data-lucide="trash-2" class="icon"></i> Eliminar video(s) crudo(s)</button>
+    {% endif %}
+</div>
+
+<div class="panel">
+    <h4><i data-lucide="bar-chart-3" class="icon"></i> Resultados actuales</h4>
+    <p class="caption">Los archivos generados por el pipeline (data/processed/ + data/output/) para la corrida más reciente.</p>
+    {% if processed_info.n_files == 0 %}
+    {% call alert('info') %}Esta cámara todavía no tiene resultados procesados.{% endcall %}
+    {% else %}
+    <p>{{ processed_info.n_files }} archivo(s) -- <strong>{{ processed_info.size_mb }} MB</strong> en total.</p>
+    <button class="btn btn-danger" id="btn-eliminar-resultados"><i data-lucide="trash-2" class="icon"></i> Eliminar resultados actuales</button>
+    {% endif %}
+</div>
+
+<div class="panel">
+    <h4><i data-lucide="history" class="icon"></i> Fechas archivadas</h4>
+    <p class="caption">Cada fecha guardada en el historial (Tendencias) archiva también sus mapas y detalle -- ver
+    <a href="{{ url_for('main.results', store=current_store) }}#tab-tendencias">Tendencias</a> para verlas en modo lectura.</p>
+    {% if not archived_dates %}
+    {% call alert('info') %}Todavía no hay ninguna fecha archivada para esta cámara.{% endcall %}
+    {% else %}
+    <table class="data-table">
+        <thead><tr><th>Fecha</th><th>Tamaño</th><th></th></tr></thead>
+        <tbody>
+            {% for d in archived_dates %}
+            <tr>
+                <td>{{ d.fecha }}</td>
+                <td>{{ d.size_mb }} MB</td>
+                <td><button class="btn btn-sm btn-danger btn-eliminar-fecha" data-fecha="{{ d.fecha }}"><i data-lucide="trash-2" class="icon"></i> Eliminar</button></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+</div>
+
+<div class="panel" style="border-color: var(--color-error);">
+    <h4 style="color: var(--color-error);"><i data-lucide="triangle-alert" class="icon"></i> Eliminar cámara completa</h4>
+    <p class="caption">Borra TODO lo de "{{ current_store }}": video(s) crudo(s), resultados actuales, TODAS las
+    fechas archivadas, la calibración de zonas, y la quita de su tienda. <strong>Esta acción es irreversible.</strong></p>
+    <button class="btn btn-danger" id="btn-eliminar-camara"><i data-lucide="trash-2" class="icon"></i> Eliminar cámara completa</button>
+</div>
+
+<!-- Diálogos de confirmación -- ver static/js/data_management.js -->
+<dialog class="confirm-dialog" id="dialog-confirm-simple">
+    <h4><i data-lucide="triangle-alert" class="icon"></i> <span id="dialog-simple-title">Confirmar eliminación</span></h4>
+    <p id="dialog-simple-body"></p>
+    <div class="confirm-actions">
+        <button class="btn btn-sm" id="dialog-simple-cancel">Cancelar</button>
+        <button class="btn btn-sm btn-danger" id="dialog-simple-confirm">Sí, eliminar</button>
+    </div>
+</dialog>
+
+<dialog class="confirm-dialog" id="dialog-confirm-camara">
+    <h4><i data-lucide="triangle-alert" class="icon"></i> Eliminar "{{ current_store }}" por completo</h4>
+    <p>Esta acción NO se puede deshacer. Para confirmar, escribí el nombre exacto de la cámara:
+    <strong>{{ current_store }}</strong></p>
+    <div class="form-field">
+        <input type="text" id="dialog-camara-input" placeholder="{{ current_store }}" autocomplete="off">
+    </div>
+    <div class="confirm-actions">
+        <button class="btn btn-sm" id="dialog-camara-cancel">Cancelar</button>
+        <button class="btn btn-sm btn-danger" id="dialog-camara-confirm" disabled>Sí, eliminar todo</button>
+    </div>
+</dialog>
+
+<div id="datos-feedback" data-store="{{ current_store }}" style="margin-top:var(--space-4);"></div>
+{% endblock %}

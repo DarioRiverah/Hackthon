@@ -1,0 +1,5 @@
+{# Macros compartidas por las plantillas del panel. #}
+
+{% macro alert(kind) %}
+<div class="alert alert-{{ kind }}"><i data-lucide="{{ {'info': 'info', 'success': 'circle-check', 'warning': 'triangle-alert', 'error': 'circle-x'}[kind] }}" class="icon" style="--icon-size:18px;"></i><div>{{ caller() }}</div></div>
+{%- endmacro %}

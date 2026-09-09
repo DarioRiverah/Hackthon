@@ -1,0 +1,453 @@
+/* =============================================================================
+   THEME.CSS -- Identidad visual de retail-vision-mvp (panel de monitoreo
+   retail: limpio, técnico, preciso, pero cálido/accesible -- NO estética de
+   "terminal de hacker").
+
+   Reemplaza por completo el sistema anterior (paleta Ember/Frost, tipografía
+   Space Grotesk + Inter). No debe quedar ninguna referencia a esos nombres
+   ni valores en el código -- ver docs/architecture.md para el historial.
+
+   Cargado por dashboard/style.py, que envuelve este archivo completo en
+   una etiqueta STYLE antes de pasarlo a st.markdown (NO como string de
+   Python embebido) -- este archivo es la única fuente de verdad del CSS
+   del proyecto.
+
+   ADVERTENCIA para quien edite este comentario: por eso mismo, este
+   archivo NUNCA debe contener el texto literal "menor-que barra
+   style mayor-que" en ningún comentario (como el párrafo de arriba
+   deliberadamente evita escribir) -- Streamlit/CommonMark trata la
+   PRIMERA aparición de esa secuencia como el cierre del bloque STYLE
+   completo, sin importar que esté dentro de un comentario /* */. Si
+   aparece antes del final real del archivo, todo el CSS que sigue se
+   muestra como texto literal en la página (bug ya ocurrido una vez).
+
+   NOTA SOBRE SELECTORES: Streamlit no expone una API pública para estilizar
+   sus componentes internos. Los selectores `[data-testid="..."]` de aquí se
+   obtuvieron inspeccionando directamente el bundle de JavaScript instalado
+   en este proyecto (venv/Lib/site-packages/streamlit/static/), no adivinados
+   de memoria -- son específicos de Streamlit 1.62.0 y podrían dejar de
+   aplicar si el proyecto actualiza de versión.
+
+   LÍMITES TÉCNICOS CONOCIDOS (documentados, no descuidos):
+   - `st.dataframe`: el texto de los encabezados de columna se dibuja sobre
+     un <canvas> (glide-data-grid, un componente de terceros) -- NO se puede
+     cambiar su tipografía con CSS. Solo se estiliza el contenedor externo.
+   - `st.radio`: no usa un <input type="radio"> nativo -- el estado
+     "seleccionado" es 100% interno de React y nunca llega al DOM final, así
+     que no hay un selector CSS honesto para reforzar la opción activa más
+     allá de lo que ya hace `primaryColor` en .streamlit/config.toml.
+
+   Ver la tabla de verificación de contraste WCAG al final de este archivo.
+   ============================================================================= */
+
+/* Las fuentes (Manrope/IBM Plex Sans) YA NO se cargan con @import aquí --
+   se probó eso primero y no era confiable (un @import dentro de un
+   <style> insertado dinámicamente vía st.markdown es una técnica
+   frágil, dependiente de detalles de implementación del navegador).
+   Ahora se cargan con el mecanismo NATIVO de Streamlit: las claves
+   `font`/`headingFont` de .streamlit/config.toml, con la sintaxis
+   "<nombre>:<url>" -- Streamlit inyecta un <link rel="stylesheet"> real
+   en la página por cada una (confirmado inspeccionando el bundle
+   instalado: el componente que arma <head> mapea "font_sources" 1:1 a
+   elementos <link>). Los nombres de fuente siguen definidos aquí como
+   variables (--font-heading/--font-body) porque ESTE archivo los sigue
+   necesitando para estilizar los elementos que nosotros mismos armamos
+   (botones, paneles, métricas) -- Streamlit no puede aplicárselos por su
+   cuenta, solo a sus propios componentes nativos. Ver
+   docs/architecture.md, sección 24, para el diagnóstico completo. */
+
+
+/* =============================================================================
+   1. VARIABLES / TOKENS
+   ============================================================================= */
+
+:root {
+    /* --- Superficies --- */
+    --color-surface: #EEF1F4;   /* fondo base de la página */
+    --color-panel: #FFFFFF;     /* fondo de tarjetas/paneles, "elevado" sobre la superficie */
+    --color-surface-alt: #E3E8ED; /* superficie secundaria (expanders "técnicos") -- ver .streamlit/config.toml secondaryBackgroundColor, MISMO valor */
+
+    /* --- Texto y estructura --- */
+    --color-ink: #1A2333;        /* texto principal */
+    --color-ink-muted: #5B6472;  /* texto secundario/subtítulos -- verificado >=4.5:1 sobre surface/panel */
+    --color-ink-on-accent: #000000; /* texto sobre fondos saturados (tarjetas de zona/interacción) -- ver nota de contraste abajo */
+    --color-line: #D7DEE5;       /* bordes y divisores, deliberadamente sutil (no es texto, no se le exige AA) */
+
+    /* --- Acento de datos: caliente/frío (paleta fija del rediseño) --- */
+    --color-hot: #E8543E;        /* "zona caliente", alta actividad -- SOLO como fondo/relleno */
+    --color-hot-text: #B93C27;   /* variante de --color-hot segura como TEXTO (ver contraste) -- misma familia de color, más oscura */
+    --color-cold: #0EA5A0;       /* "zona fría", baja actividad -- SOLO como fondo/relleno */
+    --color-cold-text: #0A736F;  /* variante de --color-cold segura como TEXTO */
+
+    /* --- Clasificación de zona: estados intermedios del semáforo (Paso/Nicho),
+       sin equivalente de marca -- deliberadamente distintos de hot/cold para
+       no reducir las 4 categorías del semáforo a solo 2 tonos. --- */
+    --color-zone-paso: #E8A23E;
+    --color-zone-nicho: #C9793A;
+    --color-zone-none: #C7CDD3;  /* "sin datos" */
+
+    /* --- Alertas semánticas: reconocibles universalmente, coherentes con la
+       paleta pero NO forzadas a hot/cold. Streamlit no permite recolorear su
+       propio st.info/success/warning/error (ver límite técnico documentado
+       arriba de dataframe/radio) -- estas variables quedan definidas para
+       cualquier HTML propio que las necesite. --- */
+    --color-info: #2E72C7;
+    --color-success: #157A52;
+    --color-warning: #9C5F0C;
+    --color-error: #C93B4E;
+
+    /* --- Tipografía --- */
+    --font-heading: 'Manrope', sans-serif;
+    --font-body: 'IBM Plex Sans', sans-serif;
+
+    /* --- Radios --- */
+    --radius-panel: 8px;
+    --radius-control: 6px;
+}
+
+
+/* =============================================================================
+   2. TIPOGRAFÍA
+
+   La fuente base de h1-h6 y del cuerpo ya la aplica Streamlit por su
+   cuenta (a mayor especificidad que un simple "h1, h2, h3" -- sus
+   propios estilos usan selectores generados por styled-components) vía
+   las claves font/headingFont de .streamlit/config.toml -- esto es
+   solo REFUERZO (peso, tracking, color) más la aplicación a nuestros
+   propios elementos (botones, paneles) que Streamlit no toca. El
+   !important es intencional: sin él, un selector interno de Streamlit
+   con mayor especificidad podía ganarle a esta regla (causa raíz real
+   del defecto de tipografía -- ver docs/architecture.md sección 24).
+   ============================================================================= */
+
+html, body, [class*="css"] {
+    font-family: var(--font-body);
+    color: var(--color-ink);
+}
+
+h1, h2, h3, h4 {
+    font-family: var(--font-heading) !important;
+    font-weight: 700;
+    color: var(--color-ink);
+    letter-spacing: -0.01em;
+}
+
+/* Encabezados de panel (#### dentro de un st.container(border=True)) --
+   un peso menor que los h1-h3 de página, para diferenciar "título de
+   sección" de "título de panel" sin mezclar niveles al azar. */
+h4 {
+    font-weight: 600;
+    font-size: 1.05rem;
+    margin-bottom: 0.4rem;
+}
+
+hr {
+    border-color: var(--color-line);
+}
+
+
+/* =============================================================================
+   3. BOTONES
+   ============================================================================= */
+
+/* Secundario (default) */
+div[data-testid="stButton"] button,
+[data-testid="stBaseButton-secondary"] {
+    border-radius: var(--radius-control);
+    border: 1px solid var(--color-line);
+    color: var(--color-ink);
+    font-family: var(--font-body);
+    font-weight: 500;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+div[data-testid="stButton"] button:hover,
+[data-testid="stBaseButton-secondary"]:hover {
+    border-color: var(--color-hot);
+    background-color: rgba(232, 84, 62, 0.06);
+}
+div[data-testid="stButton"] button:active,
+[data-testid="stBaseButton-secondary"]:active {
+    background-color: rgba(232, 84, 62, 0.12);
+}
+
+/* Primario (type="primary"): el fondo --color-hot ya lo pone
+   .streamlit/config.toml (primaryColor). IMPORTANTE: Streamlit dibuja el
+   texto del botón primario en blanco por defecto, y blanco-sobre-hot NO
+   pasa 4.5:1 (verificado: 3.64:1) -- por eso el texto se fuerza aquí a
+   --color-ink-on-accent, no es un capricho de diseño. */
+[data-testid="stBaseButton-primary"] {
+    font-family: var(--font-heading);
+    font-weight: 700;
+    color: var(--color-ink-on-accent) !important;
+    border: none;
+    transition: filter 0.15s ease;
+}
+[data-testid="stBaseButton-primary"]:hover {
+    filter: brightness(1.08);
+}
+[data-testid="stBaseButton-primary"]:active {
+    filter: brightness(0.92);
+}
+
+
+/* =============================================================================
+   4. INPUTS DE TEXTO Y NÚMERO
+   ============================================================================= */
+
+[data-testid="stTextInputRootElement"],
+[data-testid="stNumberInputContainer"] {
+    border-radius: var(--radius-control);
+    border-color: var(--color-line) !important;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+[data-testid="stTextInputRootElement"]:focus-within,
+[data-testid="stNumberInputContainer"]:focus-within {
+    border-color: var(--color-hot) !important;
+    box-shadow: 0 0 0 2px rgba(232, 84, 62, 0.15);
+}
+
+
+/* =============================================================================
+   5. TARJETAS / PANELES (st.container(border=True))
+
+   Tratamiento por TIPO de contenido, no la misma tarjeta repetida en todos
+   lados:
+     - Panel genérico (key="panel_..."): envuelve visualizaciones sueltas
+       (planos, heatmaps, tablas, gráficos) -- borde neutro, sin acento.
+     - Tarjeta de recomendación (key="rec_card_..."): acento --color-hot,
+       porque es contenido ACCIONABLE.
+     - Tarjeta de tendencia (key="trend_card_..."): acento --color-cold,
+       porque es contenido ANALÍTICO/comparativo, no una acción a tomar.
+   ============================================================================= */
+
+/* Sombra sutil ademas del borde: --color-line es un gris-azulado
+   deliberadamente de bajo contraste (ver la nota de contraste al final
+   de este archivo), así que un borde de 1px en ese color por sí solo
+   puede leerse como "sin contenedor" en pantalla -- la sombra da una
+   señal de "tarjeta elevada" que no depende del contraste del borde. */
+div[data-testid="stVerticalBlock"][class*="st-key-panel_"] {
+    background-color: var(--color-panel);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-panel);
+    padding: 0.25rem 0.25rem 0.75rem;
+    box-shadow: 0 1px 3px rgba(26, 35, 51, 0.07);
+}
+
+/* KPIs (fila superior, 4 tarjetas iguales): mismo lenguaje que el panel
+   genérico de arriba, pero reforzado -- son tarjetas pequeñas que viven
+   SOLAS (sin una imagen/gráfico grande adentro dándoles peso visual como
+   los paneles de Mapas), así que necesitan un borde/sombra más nítidos
+   para leerse como tarjeta y no como texto suelto. */
+div[data-testid="stVerticalBlock"][class*="st-key-panel_kpi"] {
+    padding: 1rem 1.25rem;
+    box-shadow: 0 1px 4px rgba(26, 35, 51, 0.10);
+}
+
+div[data-testid="stVerticalBlock"][class*="st-key-rec_card"] {
+    background-color: var(--color-panel);
+    border-left: 4px solid var(--color-hot);
+    border-radius: var(--radius-control);
+}
+
+div[data-testid="stVerticalBlock"][class*="st-key-trend_card"] {
+    background-color: var(--color-panel);
+    border-left: 4px solid var(--color-cold);
+    border-radius: var(--radius-control);
+}
+
+
+/* =============================================================================
+   6. PESTAÑAS
+   ============================================================================= */
+
+button[data-baseweb="tab"] {
+    font-family: var(--font-heading);
+    font-weight: 600;
+}
+button[data-baseweb="tab"][aria-selected="true"] {
+    color: var(--color-hot-text);
+    border-bottom-color: var(--color-hot) !important;
+}
+
+
+/* =============================================================================
+   7. SIDEBAR -- panel de control minimalista (tienda + chips de estado)
+   ============================================================================= */
+
+[data-testid="stSidebarContent"] {
+    border-right: 1px solid var(--color-line);
+}
+[data-testid="stSidebarUserContent"] {
+    padding-top: 0.5rem;
+}
+
+
+/* =============================================================================
+   8. ST.EXPANDER -- deben sentirse como contenido secundario/opcional, no
+   como una sección más (varios son explícitamente "detalles técnicos").
+   ============================================================================= */
+
+[data-testid="stExpander"] {
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-panel);
+    background-color: var(--color-surface-alt);
+    overflow: hidden;
+}
+[data-testid="stExpander"] summary {
+    font-family: var(--font-heading);
+    font-weight: 500;
+    color: var(--color-ink);
+    opacity: 0.85;
+}
+[data-testid="stExpander"] summary:hover {
+    opacity: 1;
+    color: var(--color-hot-text);
+}
+[data-testid="stExpanderDetails"] {
+    background-color: var(--color-panel);
+    border-top: 1px solid var(--color-line);
+}
+
+
+/* =============================================================================
+   9. ST.METRIC
+   ============================================================================= */
+
+/* font-size FIJO y explícito, con !important: se observó "Snacks" (un
+   valor de texto) renderizarse notablemente más grande que "1"/"6"/"9"
+   (valores numéricos) en la fila de KPIs, con los 4 usando st.metric()
+   de forma idéntica en Python (confirmado con AppTest -- no era una
+   mezcla de mecanismos). No se encontró, revisando el código fuente de
+   Streamlit (elements/metric.py y el bundle JS de Metric), ningún
+   auto-ajuste de tamaño por longitud/tipo de contenido -- así que la
+   causa exacta queda sin confirmar. Fijar el tamaño explícitamente
+   GARANTIZA la consistencia sin importar cuál sea esa causa. */
+[data-testid="stMetricValue"] {
+    font-family: var(--font-heading);
+    font-weight: 700;
+    font-size: 1.75rem !important;
+    color: var(--color-ink);
+}
+[data-testid="stMetricLabel"] {
+    font-family: var(--font-body);
+    font-size: 0.85rem !important;
+    color: var(--color-ink-muted);
+}
+/* El color de la flecha (verde/rojo de subida/bajada) se deja tal cual lo
+   da Streamlit -- es una convención universal que no conviene forzar a
+   hot/cold. Solo se homogeneiza la tipografía. */
+[data-testid="stMetricDelta"] {
+    font-family: var(--font-body);
+    font-weight: 500;
+}
+
+
+/* =============================================================================
+   10. ALERTAS (info/success/warning/error)
+
+   Se deja el color semántico que ya trae Streamlit internamente (no hay
+   forma confirmada de recolorearlo vía CSS -- ver nota de límites técnicos
+   al inicio de este archivo). Solo se homogeneiza tipografía y esquinas.
+   ============================================================================= */
+
+[data-testid="stAlert"] {
+    border-radius: var(--radius-control);
+    font-family: var(--font-body);
+}
+[data-testid="stAlertTitle"] {
+    font-family: var(--font-heading);
+    font-weight: 600;
+}
+
+
+/* =============================================================================
+   11. ST.DATAFRAME -- solo el contenedor (ver límite del canvas interno).
+   ============================================================================= */
+
+[data-testid="stDataFrame"] {
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-control);
+    overflow: hidden;
+}
+
+
+/* =============================================================================
+   12. ST.FILE_UPLOADER
+   ============================================================================= */
+
+[data-testid="stFileUploaderDropzone"] {
+    border: 1.5px dashed var(--color-line);
+    border-radius: var(--radius-control);
+    background-color: var(--color-surface-alt);
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+[data-testid="stFileUploaderDropzone"]:hover {
+    border-color: var(--color-hot);
+    background-color: rgba(232, 84, 62, 0.04);
+}
+
+
+/* =============================================================================
+   13. COMPONENTES PROPIOS (HTML generado en Python: dashboard/style.py)
+
+   status_chip() y render_step_status() generan HTML inline que referencia
+   estas MISMAS variables vía var(--color-x) -- ver dashboard/style.py.
+   No hay clases dedicadas aquí porque ese HTML ya trae sus estilos en
+   línea (necesario para que funcione fuera de un <style> con scope), pero
+   usa exclusivamente los tokens de la sección 1, nunca un color aparte.
+   ============================================================================= */
+
+
+/* =============================================================================
+   VERIFICACIÓN DE CONTRASTE WCAG (Fase 4) -- calculado con la fórmula
+   estándar de luminancia relativa (WCAG 2.1), umbral AA = 4.5:1 para texto
+   normal. Todas las combinaciones texto-sobre-fondo realmente usadas en el
+   proyecto (theme.css + HTML dinámico de Python) fueron verificadas antes
+   de fijar los valores de arriba -- las que fallaban en su primer intento
+   se corrigieron ajustando el color de TEXTO, nunca el de fondo (para no
+   perder el significado semántico de "zona caliente"/"zona fría").
+
+   | Combinación                                                | Ratio   | Veredicto |
+   |-------------------------------------------------------------|---------|-----------|
+   | ink sobre surface (texto de página)                          | 13.91:1 | OK |
+   | ink sobre panel blanco (texto dentro de paneles)              | 15.76:1 | OK |
+   | ink-muted sobre surface (captions/subtítulos)                 | 5.28:1  | OK |
+   | ink-muted sobre panel                                         | 5.98:1  | OK |
+   | ink@75% sobre surface (subtítulo del spinner de progreso)     | 6.51:1  | OK |
+   | ink-on-accent (negro) sobre hot -- texto del botón primario   | 5.77:1  | OK (blanco daba 3.64:1, por eso NO se usa blanco) |
+   | ink sobre hot tintado 12% (tarjeta "Zona Caliente")           | 13.98:1 | OK -- ver nota de rediseño abajo |
+   | ink sobre cold tintado 12% (tarjeta "Zona Fría"/interacción)  | 14.20:1 | OK |
+   | ink sobre zone-paso tintado 12% (tarjeta "Zona de Paso")      | 14.69:1 | OK |
+   | ink sobre zone-nicho tintado 12% (tarjeta "Interés de Nicho") | 14.24:1 | OK |
+   | ink sobre zone-none tintado 12% (tarjeta "Sin datos")         | 15.08:1 | OK |
+   | hot-text sobre panel blanco (pestaña activa, hover)           | 5.62:1  | OK (--color-hot puro daba 3.64:1 como texto, por eso existe esta variante) |
+   | hot-text sobre surface                                        | 4.95:1  | OK |
+   | cold-text sobre panel blanco (uso futuro como texto)          | 5.68:1  | OK (--color-cold puro daba 3.04:1 como texto) |
+   | chip de estado: texto ink sobre pastilla tintada (activo)     | 12.39:1 | OK (se rediseñó para usar SIEMPRE texto ink + un punto de color decorativo, no texto coloreado -- el punto de color en sí no necesita 4.5:1 por no ser texto) |
+   | chip de estado: texto ink sobre pastilla tintada (inactivo)   | 11.88:1 | OK |
+   | --color-info sobre blanco (uso futuro en HTML propio)         | 4.83:1  | OK |
+   | --color-success sobre blanco (uso futuro)                     | 5.33:1  | OK (un verde más claro probado primero daba 3.41:1) |
+   | --color-warning sobre blanco (uso futuro)                     | 5.18:1  | OK (un ámbar más claro probado primero daba 2.72:1) |
+   | --color-error sobre blanco (uso futuro)                       | 4.98:1  | OK |
+
+   NOTA DE REDISEÑO (tarjetas de zona/interacción): estas tarjetas
+   pasaron de fondo saturado + texto ink-on-accent (negro) a fondo
+   TINTADO (12% del color de categoría mezclado con blanco, vía
+   `color-mix(in srgb, color 12%, white)`) + borde izquierdo grueso con
+   el color saturado + texto --color-ink normal -- mismo lenguaje visual
+   que las tarjetas de recomendación/tendencia (sección 5). El margen de
+   contraste resultante es enorme (13.98:1 a 15.08:1) porque un tinte al
+   12% es, por diseño, casi blanco -- de sobra por encima del mínimo
+   4.5:1, no un caso límite. `--color-ink-on-accent` sigue existiendo y
+   en uso (texto del botón primario, sección 3), no se eliminó el token.
+
+   NO verificado contra AA (a propósito, no es texto): --color-line sobre
+   surface/panel (1.20:1 / 1.36:1) -- es un borde/divisor decorativo, y el
+   usuario pidió explícitamente un "gris-azulado SUTIL", que por definición
+   implica bajo contraste con el fondo. El estándar WCAG 1.4.11 (contraste
+   no-textual, mínimo 3:1) aplicaría solo si ese borde fuera la ÚNICA forma
+   de distinguir un componente interactivo -- aquí los paneles y botones ya
+   se distinguen también por texto/forma/sombra, así que se priorizó la
+   sutileza pedida sobre ese criterio más estricto. Si esto no es lo que se
+   esperaba, es fácil oscurecer --color-line -- avisar para ajustarlo.
+   ============================================================================= */

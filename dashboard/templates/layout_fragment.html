@@ -1,0 +1,110 @@
+{#
+Base "hermana" de layout.html, usada SOLO cuando la petición viene de
+navigateTo() en static/js/main.js (ver el context_processor
+inject_partial_base() en dashboard/app.py, que decide cuál de las dos
+usar según el header X-Requested-With: fetch-nav) -- cada template de
+página hace {% extends partial_base %} en vez de extender "layout.html"
+directamente, así el MISMO render_template(...) de cada vista sirve
+tanto la carga completa como la navegación sin recarga, sin que la
+vista tenga que saber nada de esto.
+
+No es un documento HTML completo a propósito (sin <html>/<head>/<body>)
+-- es un fragmento que static/js/main.js:navigateTo() parsea con
+DOMParser y usa para actualizar 3 cosas: document.title (del <title>
+de acá abajo), el contenido de <main class="main-content"> (desde
+#pjax-main), y la zona dinámica de la barra lateral (desde
+#pjax-sidebar, ver #sidebar-dynamic en layout.html).
+
+DUPLICACIÓN DELIBERADA: el contenido de #pjax-main (el "page hero":
+breadcrumb + <h1>) y #pjax-sidebar es EL MISMO markup que ya vive en
+layout.html -- confirmado con una prueba real que un {% block %} dentro
+de un {% include %} NO se puede sobreescribir desde el template hijo
+(la alternativa real era reescribir todos los templates de página para
+usar macros con {% call %} en vez de {% block %}, un cambio mucho más
+invasivo). Si tocás el page-hero o la zona dinámica de la sidebar acá,
+tocá el mismo bloque en layout.html.
+#}
+<title>{% block title %}Space Management{% endblock %}</title>
+<div id="pjax-main">
+<div class="page-hero">
+    {% if current_store and current_tienda %}
+    <p class="caption" style="margin-bottom:var(--space-2);">
+        <a href="{{ url_for('main.tienda_home', tienda=current_tienda.id) }}">{{ current_tienda.label }}</a>
+        &nbsp;/&nbsp;cámara
+    </p>
+    {% endif %}
+    {% if current_store %}<h1>{{ current_store }}</h1>
+    {% elif current_tienda %}<h1>{{ current_tienda.label }}</h1>
+    {% else %}<h1>Space Management</h1>{% endif %}
+    {% block hero_extra %}{% endblock %}
+</div>
+{% block content %}{% endblock %}
+</div>
+<div id="pjax-sidebar">
+<hr>
+
+<form id="tienda-select-form" method="get" action="{{ url_for('main.tienda_home') }}">
+    <div class="form-field">
+        <label for="tienda-select">Tienda</label>
+        <select id="tienda-select" name="tienda" onchange="window.handleTiendaSelectChange(this)">
+            <option value="__new__" {% if not current_tienda %}selected{% endif %}>+ Nueva tienda</option>
+            {% for t in all_tiendas %}
+            <option value="{{ t.id }}" {% if current_tienda and t.id == current_tienda.id %}selected{% endif %}>{{ t.label }}</option>
+            {% endfor %}
+        </select>
+    </div>
+</form>
+
+{% if not current_tienda %}
+<form method="get" action="{{ url_for('main.tienda_home') }}" class="form-field">
+    <label for="new-tienda-name">Nombre de la nueva tienda</label>
+    <input type="text" id="new-tienda-name" name="tienda" placeholder="ej. Tienda Centro">
+    <button type="submit" class="btn btn-sm" style="margin-top:0.5rem;">Continuar</button>
+</form>
+{% endif %}
+
+{% if current_tienda %}
+<hr>
+<nav class="tabs-nav">
+    {% if tienda_camaras|length >= 2 %}
+    <a href="{{ url_for('main.tienda_combinada', tienda_id=current_tienda.id) }}"
+       class="tab-btn {{ 'active' if (not current_store and request.endpoint == 'main.tienda_combinada') else '' }}">
+        <i data-lucide="layers" class="icon"></i> Vista combinada
+    </a>
+    {% endif %}
+    {% for cam in tienda_camaras %}
+    <a href="{{ url_for('main.results', store=cam) }}"
+       class="tab-btn {{ 'active' if current_store == cam else '' }}">
+        <i data-lucide="video" class="icon"></i> {{ cam }}
+    </a>
+    {% endfor %}
+</nav>
+<a href="{{ url_for('main.tienda_nueva_camara', tienda_id=current_tienda.id) }}" class="btn btn-sm" style="margin-top:var(--space-3); width:100%; justify-content:center;">
+    <i data-lucide="plus" class="icon"></i> Agregar cámara
+</a>
+{% endif %}
+
+{% if current_store %}
+<hr>
+<div>
+    <span class="status-chip {{ 'active' if store_state.has_zones else 'inactive' }}">
+        <span class="dot {{ 'active' if store_state.has_zones else 'inactive' }}"></span>
+        Calibrada
+    </span>
+    <span class="status-chip {{ 'active' if store_state.has_results else 'inactive' }}">
+        <span class="dot {{ 'active' if store_state.has_results else 'inactive' }}"></span>
+        Procesada
+    </span>
+    {% if store_state.n_history > 0 %}
+    <span class="status-chip active">
+        <span class="dot active"></span>
+        Historial: {{ store_state.n_history }} fecha(s)
+    </span>
+    {% endif %}
+</div>
+{% endif %}
+
+<div class="sidebar-nav-wrap">
+    {% block sidebar_nav %}{% endblock %}
+</div>
+</div>

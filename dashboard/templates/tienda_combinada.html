@@ -1,0 +1,137 @@
+{% extends partial_base %}
+{% from "_macros.html" import alert %}
+{% block title %}{{ current_tienda.label }} -- Vista combinada{% endblock %}
+
+{% block hero_extra %}
+<p class="caption" style="margin-top:var(--space-4);">
+    Vista combinada: suma los datos de las {{ kpis.n_camaras }} cámara{{ 's' if kpis.n_camaras != 1 else '' }}
+    de esta tienda. Para ver el detalle de una sola cámara (Historia, Mapas, Tendencias, Recomendaciones...),
+    elegila en la barra lateral.
+</p>
+{% endblock %}
+
+{% block content %}
+
+<h3 style="margin-top:0;">Panorama general (todas las cámaras)</h3>
+<div class="kpi-row kpi-panorama-grid">
+    <div class="kpi-card kpi-card-hero">
+        <div class="kpi-icon-chip kpi-icon-chip-zonas"><i data-lucide="camera" class="icon" style="--icon-size:18px;"></i></div>
+        <div class="kpi-label">Cámaras con resultados</div>
+        <div class="kpi-value">{{ kpis.camaras_con_resultados }}</div>
+        <div class="caption">de {{ kpis.n_camaras }} en total</div>
+    </div>
+    <div class="kpi-card kpi-card-zonas">
+        <div class="kpi-icon-chip kpi-icon-chip-visitas"><i data-lucide="map-pin" class="icon" style="--icon-size:18px;"></i></div>
+        <div class="kpi-label">Zonas monitoreadas</div>
+        <div class="kpi-value">{{ kpis.total_zones }}</div>
+    </div>
+    <div class="kpi-card kpi-card-visitas">
+        <div class="kpi-icon-chip kpi-icon-chip-interacciones"><i data-lucide="footprints" class="icon" style="--icon-size:18px;"></i></div>
+        <div class="kpi-label">Visitas totales</div>
+        <div class="kpi-value">{{ kpis.total_visits }}</div>
+    </div>
+    <div class="kpi-card kpi-card-trafico">
+        <div class="kpi-icon-chip kpi-icon-chip-top"><i data-lucide="flame" class="icon" style="--icon-size:18px;"></i></div>
+        <div class="kpi-label">Zona con más tráfico</div>
+        <div class="kpi-value">{{ kpis.top_zone_label }}</div>
+        {% if kpis.top_zone_camara %}
+        <div class="caption">{{ kpis.top_zone_visits }} visitas -- Cámara: {{ kpis.top_zone_camara }}</div>
+        {% endif %}
+    </div>
+</div>
+
+{% if mostrar_advertencia_comparabilidad %}
+{% call alert('warning') %}
+    <strong>Estos números vienen de cámaras con distinta duración/fecha de grabación</strong> -- compará con
+    cuidado, no son necesariamente períodos equivalentes. Cada fila de la tabla de abajo muestra la fecha y
+    duración de referencia de su cámara de origen.
+{% endcall %}
+{% endif %}
+
+<h3>Zonas de todas las cámaras</h3>
+{% if not zone_rows %}
+{% call alert('info') %}Ninguna de las cámaras de esta tienda tiene resultados procesados todavía.{% endcall %}
+{% else %}
+<div class="panel" style="overflow-x:auto;">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Zona</th><th>Cámara</th><th>Clasificación</th><th>Visitas</th>
+                <th>% se detiene</th><th>Permanencia prom.</th><th>Fecha de referencia</th><th>Duración de referencia</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in zone_rows %}
+            <tr>
+                <td>{{ row.zone_label }}</td>
+                <td>{{ row.camara_origen }}</td>
+                <td>{{ row.clasificacion }}</td>
+                <td>{{ row.total_visits }}</td>
+                <td>{{ "%.0f"|format(row.stop_rate_pct) }}%</td>
+                <td>{{ "%.1f"|format(row.avg_dwell_seconds) }}s</td>
+                <td>{{ row.fecha_referencia or "N/D" }}</td>
+                <td>{% if row.duracion_referencia %}{{ "%.0f"|format(row.duracion_referencia) }}s{% else %}N/D{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<h3>Simulador multi-cámara</h3>
+<p class="caption">Estima qué pasaría con la interacción de un producto si lo movieras de una zona a otra --
+    incluso entre cámaras distintas de la misma tienda. <strong>Esto es una extrapolación sobre datos reales,
+    no una predicción garantizada.</strong></p>
+
+{% if not has_two_or_more_zone_options %}
+{% call alert('info') %}Se necesitan al menos 2 zonas (en cualquier cámara de esta tienda) para usar el simulador.{% endcall %}
+{% elif not has_interaction_data %}
+{% call alert('info') %}Todavía no hay datos de interacción en ninguna cámara de esta tienda. El simulador los necesita.{% endcall %}
+{% else %}
+<div class="panel-row">
+    <div class="form-field" style="flex:1;">
+        <label for="tienda-sim-from">Zona de origen (dónde está el producto ahora)</label>
+        <select id="tienda-sim-from">
+            {% for label, key in zone_options_multi.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+        </select>
+    </div>
+    <div class="form-field" style="flex:1;">
+        <label for="tienda-sim-to">Zona destino (a dónde lo moverías)</label>
+        <select id="tienda-sim-to">
+            {% for label, key in zone_options_multi.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+        </select>
+    </div>
+</div>
+<button class="btn btn-primary" id="tienda-sim-run-btn" data-tienda="{{ current_tienda.id }}"><i data-lucide="wand-sparkles" class="icon"></i> Simular</button>
+<div id="tienda-sim-result" style="margin-top:var(--space-4);"></div>
+{% endif %}
+
+<div class="panel" style="border-color: var(--color-error); margin-top: var(--space-8);">
+    <h4 style="color: var(--color-error);"><i data-lucide="triangle-alert" class="icon"></i> Eliminar tienda completa</h4>
+    <p class="caption">Borra la tienda "{{ current_tienda.label }}" Y sus {{ tienda_camaras|length }}
+    cámara{{ 's' if tienda_camaras|length != 1 else '' }} ({{ tienda_camaras|join(', ') }}): video(s)
+    crudo(s), resultados actuales, TODAS las fechas archivadas, y la calibración de zonas de cada una.
+    <strong>Esta acción es irreversible.</strong></p>
+    <button class="btn btn-danger" id="btn-eliminar-tienda" data-tienda-label="{{ current_tienda.label }}">
+        <i data-lucide="trash-2" class="icon"></i> Eliminar tienda completa
+    </button>
+</div>
+
+<dialog class="confirm-dialog" id="dialog-confirm-tienda">
+    <h4><i data-lucide="triangle-alert" class="icon"></i> Eliminar "{{ current_tienda.label }}" por completo</h4>
+    <p>Esto eliminará la tienda <strong>"{{ current_tienda.label }}"</strong> Y sus {{ tienda_camaras|length }}
+    cámara{{ 's' if tienda_camaras|length != 1 else '' }}: <strong>{{ tienda_camaras|join(', ') }}</strong> --
+    junto con todos sus videos, resultados e historial. Esta acción NO se puede deshacer.</p>
+    <p>Para confirmar, escribí el nombre exacto de la tienda: <strong>{{ current_tienda.label }}</strong></p>
+    <div class="form-field">
+        <input type="text" id="dialog-tienda-input" placeholder="{{ current_tienda.label }}" autocomplete="off">
+    </div>
+    <div class="confirm-actions">
+        <button class="btn btn-sm" id="dialog-tienda-cancel">Cancelar</button>
+        <button class="btn btn-sm btn-danger" id="dialog-tienda-confirm" disabled>Sí, eliminar todo</button>
+    </div>
+</dialog>
+
+<div id="tienda-eliminar-feedback" data-tienda="{{ current_tienda.id }}" style="margin-top:var(--space-4);"></div>
+
+{% endblock %}

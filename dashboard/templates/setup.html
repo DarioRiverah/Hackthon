@@ -1,0 +1,139 @@
+{% extends partial_base %}
+{% from "_macros.html" import alert %}
+{% block title %}Configurar {{ current_store }} -- Space Management{% endblock %}
+{% block content %}
+
+<p class="caption">Configurando <strong>{{ current_store }}</strong>: sube tu grabación, marca el rango de interés, y deja que el sistema procese el resto.</p>
+
+{% with messages = get_flashed_messages() %}
+  {% if messages %}{% for m in messages %}{% call alert('warning') %}{{ m }}{% endcall %}{% endfor %}{% endif %}
+{% endwith %}
+
+<h3>1. Sube tu video</h3>
+{% if not video_path %}
+<form method="post" action="{{ url_for('setup.upload') }}" enctype="multipart/form-data">
+    <input type="hidden" name="store" value="{{ current_store }}">
+    <label class="custom-file-upload form-field" for="video-upload">
+        <div class="icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 16.5V7.5M8.5 11L12 7.5L15.5 11M4 17.5V18.75C4 19.9926 5.00736 21 6.25 21H17.75C18.9926 21 20 19.9926 20 18.75V17.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </div>
+        <div class="text"><span>Arrastra o selecciona tu video</span></div>
+        <input id="video-upload" type="file" name="video" accept=".mp4,.avi,.mov" required>
+    </label>
+    <button type="submit" class="btn btn-primary"><i data-lucide="upload" class="icon"></i> Subir video</button>
+</form>
+{% else %}
+<video controls class="media-frame">
+    <source src="{{ url_for('api.media', relpath=video_path) }}">
+</video>
+<form method="post" action="{{ url_for('setup.reset') }}" style="margin-top:0.5rem;">
+    <input type="hidden" name="store" value="{{ current_store }}">
+    <button type="submit" class="btn btn-sm"><i data-lucide="rotate-ccw" class="icon"></i> Usar otro video</button>
+</form>
+
+<h3>2. (Opcional) Elige un rango a analizar</h3>
+<div class="checkbox-row">
+    <input type="checkbox" id="want-trim">
+    <label for="want-trim" style="font-weight:400;">Quiero recortar el video (por ejemplo, para evitar horas de tienda cerrada)</label>
+</div>
+<div id="trim-section" style="display:none;">
+    <p class="caption">Duración total: <span id="trim-duration-label"></span></p>
+    <div class="form-field">
+        <label>Rango a analizar (segundos)</label>
+        <input type="range" id="trim-start" min="0" max="{{ duration }}" value="0" step="0.5">
+        <input type="range" id="trim-end" min="0" max="{{ duration }}" value="{{ duration }}" step="0.5">
+        <p class="caption" id="trim-range-label"></p>
+    </div>
+    <div class="thumb-row">
+        <div class="thumb-col panel"><p class="caption">Inicio</p><img id="trim-start-thumb"></div>
+        <div class="thumb-col panel"><p class="caption">Fin</p><img id="trim-end-thumb"></div>
+    </div>
+    <button class="btn" id="trim-apply-btn" data-video="{{ video_path }}"><i data-lucide="scissors" class="icon"></i> Recortar video con el rango elegido</button>
+    <div id="trim-status" class="caption"></div>
+</div>
+
+<h3>3. Marca tus góndolas</h3>
+{% if has_heat_preview %}
+{% call alert('success') %}Hay una vista previa de calor disponible para guiar la calibración.{% endcall %}
+{% else %}
+{% call alert('info') %}Todavía no hay una vista previa de calor para este video. Sin ella, es fácil calibrar una zona mal ubicada y perder interacción real.{% endcall %}
+<button class="btn" id="generate-preview-btn" data-store="{{ current_store }}" data-video="{{ video_path }}"><i data-lucide="flame" class="icon"></i> Generar vista previa de calor (recomendado, toma unos minutos)</button>
+<div id="preview-progress"></div>
+{% endif %}
+
+{% if zones_exist %}
+{% call alert('success') %}Ya existen zonas calibradas para "{{ current_store }}".{% endcall %}
+<div class="checkbox-row"><input type="checkbox" id="recalibrate-check"><label for="recalibrate-check" style="font-weight:400;">Recalibrar de todos modos</label></div>
+<div id="calibration-area" style="display:none;"></div>
+{% else %}
+<div id="calibration-area"></div>
+{% endif %}
+
+<div id="calibration-root" data-store="{{ current_store }}" data-video="{{ video_path }}" data-has-heat-preview="{{ 'true' if has_heat_preview else 'false' }}"></div>
+
+<h3>4. Procesar</h3>
+<div id="process-section">
+    <div class="checkbox-row">
+        <input type="checkbox" id="skip-hands-check">
+        <label for="skip-hands-check" style="font-weight:400;">Omitir detección de manos/interacción (procesa más rápido, pero no tendrás datos de interacción con el producto)</label>
+    </div>
+    <div class="checkbox-row">
+        <input type="checkbox" id="record-history-check" checked>
+        <label for="record-history-check" style="font-weight:400;">Guardar este resultado en el historial de tendencias</label>
+    </div>
+    <div class="form-field" id="run-date-field">
+        <label for="run-date-input">Fecha de esta grabación</label>
+        <input type="date" id="run-date-input">
+        <p class="caption" id="run-date-help">Se guardará con la fecha de hoy para poder comparar tendencias más adelante. Cambia la fecha si esta grabación es de otro día.</p>
+    </div>
+
+    <details class="expander">
+        <summary><i data-lucide="sliders-horizontal" class="icon"></i> Ajustes técnicos avanzados (no hace falta tocar esto en la mayoría de los casos) <i data-lucide="chevron-down" class="icon chevron"></i></summary>
+        <div class="expander-body">
+            <p class="caption">Estos valores afinan el algoritmo interno que sigue a cada persona en el video. Los valores por defecto ya funcionan bien para la mayoría de los videos.</p>
+            <div class="panel-row">
+                <div class="form-field"><label>Cuerpo: segundos máximos de "desaparición" tolerados</label><input type="number" id="body-max-gap" value="2.0" step="0.1"></div>
+                <div class="form-field"><label>Cuerpo: velocidad máxima plausible (px/s)</label><input type="number" id="body-max-speed" value="500.0" step="10"></div>
+            </div>
+            <div class="panel-row">
+                <div class="form-field"><label>Mano: segundos máximos de "desaparición" tolerados</label><input type="number" id="hand-max-gap" value="5.0" step="0.1"></div>
+                <div class="form-field"><label>Mano: velocidad máxima plausible (px/s)</label><input type="number" id="hand-max-speed" value="300.0" step="10"></div>
+            </div>
+        </div>
+    </details>
+
+    <button class="btn btn-primary" id="process-btn" data-store="{{ current_store }}"><i data-lucide="play" class="icon"></i> Procesar video</button>
+    <div id="process-progress"></div>
+</div>
+{% endif %}
+
+<!-- Overlay de pantalla completa compartido por las 3 acciones con
+     progreso (vista previa de calor, procesar, recortar) -- ver
+     static/js/setup.js: showLoadingOverlay()/updateLoadingOverlay()/
+     hideLoadingOverlay(). -->
+<div class="loading-overlay" id="loading-overlay" hidden>
+    <div class="wheel-and-hamster" aria-label="Cargando" role="img">
+        <div class="wheel"></div>
+        <div class="hamster">
+            <div class="hamster__body">
+                <div class="hamster__head">
+                    <div class="hamster__ear"></div>
+                    <div class="hamster__eye"></div>
+                    <div class="hamster__nose"></div>
+                </div>
+                <div class="hamster__limb hamster__limb--fr"></div>
+                <div class="hamster__limb hamster__limb--fl"></div>
+                <div class="hamster__limb hamster__limb--br"></div>
+                <div class="hamster__limb hamster__limb--bl"></div>
+                <div class="hamster__tail"></div>
+            </div>
+        </div>
+        <div class="spoke"></div>
+    </div>
+    <div class="loading-overlay__title" id="loading-overlay-title">En curso</div>
+    <div class="loading-overlay__desc" id="loading-overlay-desc">Procesando...</div>
+</div>
+
+{% endblock %}

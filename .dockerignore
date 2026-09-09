@@ -1,0 +1,51 @@
+# =============================================================================
+# Build context de Docker -- ver Dockerfile y DOCKER.md.
+# =============================================================================
+
+# Entorno virtual local: las dependencias se reinstalan DENTRO de la
+# imagen (ver Dockerfile) -- copiar esto solo infla el build context y
+# puede arrastrar rutas absolutas de esta máquina.
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Control de versiones -- no aporta nada al runtime de la app.
+.git/
+.gitignore
+
+# config/ y data/ se montan como VOLÚMENES en docker-compose.yml (ver
+# DOCKER.md), nunca se hornean en la imagen -- lo que sea que hubiera acá
+# en el build context sería sombra muerta (el bind mount del host lo tapa
+# apenas arranca el contenedor). Se excluye todo el árbol, no solo los
+# archivos pesados, para no inflar la imagen con datos de desarrollo local.
+config/
+data/
+
+# Versión anterior (Streamlit) preservada solo como referencia histórica
+# -- no la usa la app Flask actual (ver docs/architecture.md sección 25).
+_legacy_streamlit/
+
+# Capturas de pantalla de la documentación -- no las usa la app en runtime.
+docs/screenshots/
+
+# Modelos YOLO sueltos en la raíz del proyecto (residuo del desarrollo
+# local): el Dockerfile los vuelve a descargar DENTRO del build
+# (`RUN python -c "from ultralytics import YOLO; ..."`) para garantizar
+# una copia limpia y reproducible -- copiarlos aquí también solo
+# duplicaría peso en el build context sin necesidad. Lo mismo aplica a
+# las carpetas exportadas a OpenVINO (`*_openvino_model/`, generadas por
+# `pipeline/export_openvino.py`) -- si se copiaran del host, pisarían
+# (o esconderían un fallo de) la conversión que el build hace por su
+# cuenta, invalidando la red de seguridad.
+*.pt
+*_openvino_model/
+
+# Secretos/entornos locales, por si acaso -- nunca deben viajar en una imagen.
+.env
+.secrets/
+
+# Artefactos de otros hackathons de desarrollo local en Windows/editor.
+.vscode/
+.idea/
+*.log

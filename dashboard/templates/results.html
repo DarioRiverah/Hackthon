@@ -1,0 +1,380 @@
+{% extends partial_base %}
+{% from "_macros.html" import alert %}
+{% block title %}{{ current_store }} -- Space Management{% endblock %}
+
+{% block hero_extra %}
+<details class="expander">
+    <summary><i data-lucide="video" class="icon"></i> Agregar nueva grabación / recalibrar <i data-lucide="chevron-down" class="icon chevron"></i></summary>
+    <div class="expander-body">
+        <p class="caption">Para subir un nuevo video, recortar o recalibrar zonas, ve al
+        <a href="{{ url_for('setup.wizard', store=current_store) }}">asistente de configuración</a>.</p>
+    </div>
+</details>
+{% endblock %}
+
+{% block sidebar_nav %}
+<nav class="tabs-nav">
+    <button class="tab-btn active" data-tab="resumen"><i data-lucide="layout-dashboard" class="icon"></i> Resumen</button>
+    <button class="tab-btn" data-tab="historia"><i data-lucide="scroll-text" class="icon"></i> Historia</button>
+    <button class="tab-btn" data-tab="mapas"><i data-lucide="map" class="icon"></i> Mapas y trayectorias</button>
+    <button class="tab-btn" data-tab="interaccion"><i data-lucide="hand" class="icon"></i> Interacción con producto</button>
+    <button class="tab-btn" data-tab="tendencias"><i data-lucide="trending-up" class="icon"></i> Tendencias</button>
+    <button class="tab-btn" data-tab="simulador"><i data-lucide="flask-conical" class="icon"></i> Simulador</button>
+    <button class="tab-btn" data-tab="recomendaciones"><i data-lucide="lightbulb" class="icon"></i> Recomendaciones</button>
+    <a href="{{ url_for('main.datos_camara', store=current_store) }}" class="tab-btn"><i data-lucide="database" class="icon"></i> Datos</a>
+</nav>
+{% endblock %}
+
+{% block content %}
+
+{% if is_historical %}
+<div class="alert alert-warning" style="margin-bottom:var(--space-5);">
+    <i data-lucide="history" class="icon" style="--icon-size:18px;"></i>
+    <div>
+        <strong>Viendo resultados archivados del {{ historical_date }}</strong> -- esta NO es la corrida más
+        reciente. Los números, mapas e historia de abajo corresponden a esa fecha específica, no al estado
+        actual de la cámara.
+        <a href="{{ url_for('main.results', store=current_store) }}">Volver a la vista actual &rarr;</a>
+    </div>
+</div>
+{% endif %}
+
+<!-- ============ RESUMEN (nueva sección: antes era "Panorama general" +
+     "Resumen por zona" repetidos arriba de cada pestaña -- ahora vive
+     una sola vez, en su propia sección de navegación) ============ -->
+<section class="tab-panel active" id="tab-resumen">
+    <h3 style="margin-top:0;">Panorama general</h3>
+    <div class="kpi-row kpi-panorama-grid">
+        <div class="kpi-card kpi-card-hero">
+            <div class="kpi-icon-chip kpi-icon-chip-zonas"><i data-lucide="map-pin" class="icon" style="--icon-size:18px;"></i></div>
+            <div class="kpi-label">Zonas monitoreadas</div>
+            <div class="kpi-value">{{ kpis.total_zones }}</div>
+        </div>
+        <div class="kpi-card kpi-card-zonas">
+            <div class="kpi-icon-chip kpi-icon-chip-visitas"><i data-lucide="footprints" class="icon" style="--icon-size:18px;"></i></div>
+            <div class="kpi-label">Visitas totales</div>
+            <div class="kpi-value">{{ kpis.total_visits }}</div>
+        </div>
+        <div class="kpi-card kpi-card-visitas">
+            <div class="kpi-icon-chip kpi-icon-chip-interacciones"><i data-lucide="hand" class="icon" style="--icon-size:18px;"></i></div>
+            <div class="kpi-label">Interacciones totales</div>
+            {% if kpis.total_interactions is none %}
+            <div class="kpi-value">N/D</div>
+            <div class="caption">No medido (video procesado sin detección de manos).</div>
+            {% else %}
+            <div class="kpi-value">{{ kpis.total_interactions }}</div>
+            {% endif %}
+        </div>
+        <div class="kpi-card kpi-card-trafico">
+            <div class="kpi-icon-chip kpi-icon-chip-top"><i data-lucide="flame" class="icon" style="--icon-size:18px;"></i></div>
+            <div class="kpi-label">Zona con más tráfico</div>
+            <div class="kpi-value">{{ kpis.top_zone_label }}</div>
+            <div class="caption">{{ kpis.top_zone_visits }} visitas registradas</div>
+        </div>
+    </div>
+
+    <h3>Resumen por zona</h3>
+    <div class="semaphore-row">
+        {% for card in zone_cards %}
+        <div class="category-card{{ ' category-card-pulse' if card.label == 'Zona Caliente' else '' }}" style="--category-color: {{ card.color }};">
+            <div class="cc-label">{{ card.zone_label }}</div>
+            <div class="cc-title">{{ card.label }}</div>
+            <div class="cc-detail">
+                {{ card.total_visits }} visitas registradas<br>
+                {{ "%.0f"|format(card.stop_rate_pct) }}% se detuvieron<br>
+                {{ "%.1f"|format(card.avg_dwell_seconds) }}s de permanencia promedio
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    <div class="legend-row">
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--color-hot);"></span><span>Zona Caliente (alto tráfico + se detienen)</span></div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--color-zone-paso);"></span><span>Zona de Paso (alto tráfico, no se detienen)</span></div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--color-zone-nicho);"></span><span>Interés de Nicho (poco tráfico, sí se detienen)</span></div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--color-cold);"></span><span>Zona Fría (poco tráfico)</span></div>
+    </div>
+</section>
+
+<!-- ============ HISTORIA ============ -->
+<section class="tab-panel" id="tab-historia">
+    {% if not story.has_data %}
+    {% call alert('info') %}Todavía no hay eventos de zona para contar una historia. Procesa un video desde el asistente de configuración primero.{% endcall %}
+    {% else %}
+    <div class="panel">
+        <h4>Resumen narrado</h4>
+        <p class="caption">Lo que ocurrió en este video, a nivel agregado -- no distingue entre clientes específicos (ver nota de alcance abajo).</p>
+        <p>{{ story.narrative }}</p>
+
+        <details class="expander">
+            <summary><i data-lucide="list" class="icon"></i> Ver línea de tiempo completa de eventos <i data-lucide="chevron-down" class="icon chevron"></i></summary>
+            <div class="expander-body">
+                {% for event in story.timeline %}
+                <div class="timeline-item">
+                    <span class="timeline-icon {{ 'timeline-icon-stop' if event.icon_type == 'stop' else 'timeline-icon-hand' if event.icon_type == 'hand' else 'timeline-icon-footprints' }}">
+                        {% if event.icon_type == 'stop' %}<i data-lucide="timer-reset" class="icon" style="--icon-size:15px;"></i>
+                        {% elif event.icon_type == 'hand' %}<i data-lucide="hand" class="icon" style="--icon-size:15px;"></i>
+                        {% else %}<i data-lucide="footprints" class="icon" style="--icon-size:15px;"></i>
+                        {% endif %}
+                    </span>
+                    <span><span class="timeline-time">{{ event.time_label }}</span>{{ event.description }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </details>
+
+        <p class="caption">Nota de alcance: estos eventos NO se desglosan por cliente individual. La identificación
+        de personas usa heurísticas geométricas (posición, velocidad, dirección), confiables para una persona sola
+        en cuadro, pero no validadas para escenas con varias personas simultáneas -- un cruce de trayectorias podría
+        fusionar o dividir identidades por error. Por eso se narra en términos de eventos observados, no de "qué
+        hizo cada cliente".</p>
+    </div>
+    {% endif %}
+</section>
+
+<!-- ============ MAPAS ============ -->
+<section class="tab-panel" id="tab-mapas">
+    <div class="panel-row">
+        <div class="panel">
+            <h4>Plano de la tienda</h4>
+            <img src="{{ url_for('api.layout_plot', store_name=current_store, fecha=historical_date if is_historical else none) }}" class="panel-img lightbox-img" alt="Plano de la tienda">
+        </div>
+        <div class="panel">
+            <h4>Mapas de calor y trayectorias</h4>
+            {% if not available_heatmaps %}
+            {% call alert('info') %}Todavía no hay ninguna visualización generada para este video.{% endcall %}
+            {% else %}
+            <div style="margin-bottom:var(--space-4);">
+                {% for label, path in available_heatmaps.items() %}
+                <label class="checkbox-row" style="display:inline-flex; margin-right:var(--space-4);">
+                    <input type="radio" name="heatmap-variant" value="{{ url_for('api.media', relpath=path) }}" {% if loop.first %}checked{% endif %}
+                           onchange="document.getElementById('heatmap-img').src=this.value">
+                    {{ label }}
+                </label>
+                {% endfor %}
+            </div>
+            {% set first_url = url_for('api.media', relpath=available_heatmaps.values()|list|first) %}
+            <img id="heatmap-img" src="{{ first_url }}" class="panel-img lightbox-img" alt="Mapa de calor">
+            {% if missing_heatmaps %}
+            <p class="caption">No disponibles todavía: {{ missing_heatmaps|join(', ') }} (se generan al procesar el video sin la opción "Omitir detección de manos").</p>
+            {% endif %}
+            {% endif %}
+        </div>
+    </div>
+
+    <details class="expander">
+        <summary><i data-lucide="flask-conical" class="icon"></i> Detalles técnicos (opcional): video de verificación de seguimiento <i data-lucide="chevron-down" class="icon chevron"></i></summary>
+        <div class="expander-body">
+            <p class="caption">Este video es una herramienta de control de calidad: confirma que cada persona se
+            sigue correctamente durante todo su recorrido (el mismo color debe acompañarla de principio a fin).
+            No hace falta revisarlo para usar el resto del panel.</p>
+            {% if not available_videos %}
+            {% if is_historical %}
+            {% call alert('info') %}Los videos de verificación no se archivan por fecha (pesan demasiado y son
+            una herramienta de diagnóstico técnico, no contenido histórico -- ver docs/architecture.md sección 34).
+            Para verlo, procesa de nuevo esta cámara.{% endcall %}
+            {% else %}
+            {% call alert('info') %}Todavía no hay un video de verificación para este video.{% endcall %}
+            {% endif %}
+            {% else %}
+            {% for label, path in available_videos.items() %}
+            <p class="sub-label">{{ label }}</p>
+            <video controls class="media-frame" style="margin-bottom:var(--space-4);">
+                <source src="{{ url_for('api.media', relpath=path) }}" type="video/webm">
+            </video>
+            {% endfor %}
+            {% endif %}
+        </div>
+    </details>
+</section>
+
+<!-- ============ INTERACCIÓN ============ -->
+<section class="tab-panel" id="tab-interaccion">
+    {% if not interaction_cards %}
+    {% call alert('info') %}Todavía no hay datos de interacción para esta tienda/video. Esto pasa si el video
+    se procesó con la opción "Omitir detección de manos" activada.{% endcall %}
+    {% else %}
+    <div class="panel">
+        <h4>Interacción física por zona</h4>
+        <p class="caption">Estas métricas cuentan cuántas veces la mano entró al estante y por cuánto tiempo. No
+        distinguen si el resultado fue tomar o devolver un producto -- esa distinción requiere modelos de
+        reconocimiento de acciones fuera del alcance de este MVP.</p>
+        <div class="semaphore-row">
+            {% for card in interaction_cards %}
+            <div class="category-card" style="--category-color: var(--color-cold);">
+                <div class="cc-label">{{ card.zone_label }}</div>
+                <div class="cc-title">{{ card.total_interactions }} interacciones</div>
+                <div class="cc-detail">
+                    {{ card.toques_breves }} toques breves<br>
+                    {{ card.interacciones_medias }} medias<br>
+                    {{ card.interacciones_prolongadas }} prolongadas<br>
+                    {{ "%.1f"|format(card.avg_duration_seconds) }}s de duración promedio
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</section>
+
+<!-- ============ TENDENCIAS ============ -->
+<section class="tab-panel" id="tab-tendencias">
+    <div class="panel">
+        <h4><i data-lucide="history" class="icon"></i> Ver una fecha archivada</h4>
+        <p class="caption">Cada corrida guardada en el historial también archiva sus mapas y detalle de esa fecha
+        -- podés verla tal como quedó ese día, en modo lectura, sin afectar la vista actual.</p>
+        {% if not archived_dates %}
+        {% call alert('info') %}Todavía no hay ninguna fecha archivada para esta cámara.{% endcall %}
+        {% else %}
+        <form method="get" action="{{ url_for('main.results_historico') }}" class="panel-row" style="align-items:flex-end;">
+            <input type="hidden" name="store" value="{{ current_store }}">
+            <div class="form-field" style="flex:1;">
+                <label for="archived-date-select">Fecha archivada</label>
+                <select id="archived-date-select" name="fecha">
+                    {% for d in archived_dates %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary"><i data-lucide="eye" class="icon"></i> Ver esa fecha</button>
+        </form>
+        {% endif %}
+    </div>
+
+    {% if not trends_data.has_enough_dates %}
+    {% call alert('info') %}
+        Se necesitan al menos 2 fechas guardadas para poder comparar (hay {{ trends_data.dates|length }} disponible(s)
+        por ahora). Cada video que proceses queda guardado automáticamente en el historial -- procesa otra
+        grabación (de otro día, o la de hoy en otro momento) para empezar a ver tendencias acá.
+    {% endcall %}
+    {% else %}
+
+    {% if history_series.has_data %}
+    <div class="panel">
+        <h4>Evolución en el tiempo</h4>
+        <div class="panel-row">
+            <div class="form-field" style="max-width:260px;">
+                <label for="trend-metric-select">Métrica</label>
+                <select id="trend-metric-select">
+                    {% for key, label in history_series.metric_options.items() %}
+                    <option value="{{ key }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-field" style="max-width:200px;">
+                <label for="trend-agrupacion-select">Agrupación</label>
+                <select id="trend-agrupacion-select">
+                    <option value="dia">Día (cada fecha)</option>
+                    <option value="semana">Semana</option>
+                    <option value="mes">Mes</option>
+                </select>
+            </div>
+        </div>
+        <div class="chart-wrap"><canvas id="trend-history-chart"></canvas></div>
+        <div id="trend-agrupacion-msg"></div>
+        <p class="caption" id="trend-agrupacion-caption">Cada línea es una zona calibrada; los puntos son las fechas en las que se guardó una corrida en el historial ({{ history_series.labels|length }} en total).</p>
+    </div>
+    <script type="application/json" id="trend-history-data">{{
+        {"dia": history_series, "semana": history_series_semana, "mes": history_series_mes} | tojson
+    }}</script>
+    {% endif %}
+
+    {% if trends_data.same_dates %}
+    {% call alert('warning') %}Elige dos fechas distintas para comparar.{% endcall %}
+    {% else %}
+    <h4>Comparación detallada: "{{ trends_data.date_a }}" a "{{ trends_data.date_b }}"</h4>
+    {% for card in trends_data.cards %}
+    <div class="panel card-info">
+        <h4>{{ card.zone_label }}</h4>
+        <div class="metric-row">
+            {% for m in card.metrics %}
+            <div class="metric">
+                <div class="metric-label">{{ m.label }}</div>
+                <div class="metric-value">{{ m.value_b }}
+                    <span class="metric-delta {{ 'positive' if m.delta_positive else 'negative' }}">{{ m.delta_str }}</span>
+                </div>
+                <div class="caption">Antes ({{ trends_data.date_a }}): {{ m.value_a }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+    {% endif %}
+</section>
+
+<!-- ============ SIMULADOR ============ -->
+<section class="tab-panel" id="tab-simulador">
+    <p class="caption">Estima qué pasaría con la interacción de un producto si lo movieras de una zona a otra,
+    basándose en el tráfico ya observado de ambas zonas. <strong>Esto es una extrapolación sobre datos reales, no
+    una predicción garantizada.</strong></p>
+
+    {% if is_historical %}
+    {% call alert('info') %}El simulador trabaja sobre los datos MÁS RECIENTES de la cámara, no sobre una fecha
+    archivada específica -- <a href="{{ url_for('main.results', store=current_store) }}">volvé a la vista actual</a>
+    para usarlo.{% endcall %}
+    {% elif not has_two_or_more_zones %}
+    {% call alert('info') %}Necesitas al menos 2 zonas calibradas para usar el simulador.{% endcall %}
+    {% elif not has_interaction_data %}
+    {% call alert('info') %}Todavía no hay datos de interacción para esta tienda. El simulador los necesita.{% endcall %}
+    {% else %}
+    <div class="panel-row">
+        <div class="form-field" style="flex:1;">
+            <label for="sim-from">Zona de origen (donde está el producto ahora)</label>
+            <select id="sim-from">
+                {% for label, zid in zone_options.items() %}<option value="{{ zid }}">{{ label }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="form-field" style="flex:1;">
+            <label for="sim-to">Zona destino (a donde lo moverías)</label>
+            <select id="sim-to">
+                {% for label, zid in zone_options.items() %}<option value="{{ zid }}">{{ label }}</option>{% endfor %}
+            </select>
+        </div>
+    </div>
+    <button class="btn btn-primary" id="sim-run-btn" data-store="{{ current_store }}"><i data-lucide="wand-sparkles" class="icon"></i> Simular</button>
+    <div id="sim-result" style="margin-top:var(--space-4);"></div>
+    {% endif %}
+</section>
+
+<!-- ============ RECOMENDACIONES ============ -->
+<section class="tab-panel" id="tab-recomendaciones">
+    {% call alert('info') %}{{ exec_summary }}{% endcall %}
+
+    {% for rec in recommendations %}
+    <div class="panel card-accent">
+        <h4>{{ rec.zone_label }}</h4>
+        <p><span class="field-badge field-badge-neutral">Diagnóstico</span><br>{{ rec.diagnostico }}</p>
+        <p><span class="field-badge field-badge-accent">Sugerencia</span><br>{{ rec.sugerencia }}</p>
+    </div>
+    {% endfor %}
+
+    {% if is_historical %}
+    {% call alert('info') %}El reporte PDF y el asistente de IA usan siempre los datos más recientes de la cámara
+    -- no están disponibles para una fecha archivada específica.{% endcall %}
+    {% else %}
+    <div class="panel" style="display:flex; align-items:center; justify-content:space-between; gap:var(--space-5); flex-wrap:wrap; padding-top:var(--space-4); padding-bottom:var(--space-4);">
+        <div>
+            <h4 style="margin-bottom:var(--space-1);">Reporte ejecutivo</h4>
+            <p class="caption" style="margin:0;">Genera un PDF de una página con estas métricas y recomendaciones, listo para compartir.</p>
+        </div>
+        <a class="btn btn-primary" href="{{ url_for('api.report_pdf', store_name=current_store) }}"><i data-lucide="file-down" class="icon"></i> Descargar reporte PDF</a>
+    </div>
+    {% endif %}
+
+    <details class="expander">
+        <summary><i data-lucide="table" class="icon"></i> Ver tabla completa de métricas <i data-lucide="chevron-down" class="icon chevron"></i></summary>
+        <div class="expander-body">
+            <table class="data-table">
+                <thead><tr><th>Zona</th><th>Clasificación</th><th>Visitas</th><th>% se detiene</th><th>Permanencia prom.</th></tr></thead>
+                <tbody>
+                {% for row in display_rows %}
+                <tr>
+                    <td>{{ row.zone_label }}</td><td>{{ row.clasificacion }}</td><td>{{ row.total_visits }}</td>
+                    <td>{{ "%.0f"|format(row.stop_rate_pct) }}%</td><td>{{ "%.1f"|format(row.avg_dwell_seconds) }}s</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </details>
+</section>
+
+{% endblock %}

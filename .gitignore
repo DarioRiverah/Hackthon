@@ -1,0 +1,11 @@
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.mp4
+*.avi
+runs/

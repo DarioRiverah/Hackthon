@@ -1,0 +1,18 @@
+{% extends partial_base %}
+{% from "_macros.html" import alert %}
+{% block title %}Space Management{% endblock %}
+{% block content %}
+{% call alert('info') %}Elige una tienda existente, o crea una nueva, en la barra lateral para comenzar.{% endcall %}
+
+{% if all_tiendas %}
+<h3 style="margin-top:0;">Tiendas existentes</h3>
+<div class="semaphore-row">
+    {% for t in all_tiendas %}
+    <a href="{{ url_for('main.tienda_home', tienda=t.id) }}" class="panel" style="display:block; text-decoration:none; color:inherit; margin-bottom:0;">
+        <div class="sub-label" style="font-size:var(--text-lg); font-family:var(--font-heading); font-weight:700;">{{ t.label }}</div>
+        <p class="caption" style="margin:var(--space-2) 0 0;">{{ t.n_camaras }} cámara{{ 's' if t.n_camaras != 1 else '' }}</p>
+    </a>
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,21 @@
+{% extends partial_base %}
+{% from "_macros.html" import alert %}
+{% block title %}{{ current_tienda.label }} -- Space Management{% endblock %}
+{% block content %}
+
+<div class="panel" style="text-align:center; padding:var(--space-9);">
+    <div class="kpi-icon-chip kpi-icon-chip-zonas" style="margin:0 auto var(--space-4);">
+        <i data-lucide="camera" class="icon" style="--icon-size:20px;"></i>
+    </div>
+    <h3 style="margin-top:0;">Todavía no hay cámaras en "{{ current_tienda.label }}"</h3>
+    <p class="caption" style="max-width:480px; margin:0 auto var(--space-5);">
+        Una tienda agrupa varias cámaras (una por video/góndola calibrada) para poder ver sus números
+        combinados. Agrega la primera cámara para empezar -- podés subir un video nuevo, o vincular una
+        cámara que ya hayas procesado antes por separado.
+    </p>
+    <a class="btn btn-primary" href="{{ url_for('main.tienda_nueva_camara', tienda_id=current_tienda.id) }}">
+        <i data-lucide="plus" class="icon"></i> Agregar la primera cámara
+    </a>
+</div>
+
+{% endblock %}

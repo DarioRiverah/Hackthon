@@ -1,0 +1,31 @@
+# Camino principal (CPU) -- ver DOCKER.md. Un solo comando:
+#   docker-compose up --build
+services:
+  retail-vision:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    volumes:
+      # config/ y data/ como VOLÚMENES (no horneados en la imagen): así
+      # persisten entre `docker-compose down`/`up` y sobreviven a un
+      # `--build` que reconstruya la imagen desde cero. Los modelos .pt
+      # NO se montan -- ya viven horneados dentro de la imagen (ver
+      # Dockerfile), así el contenedor arranca 100% offline.
+      - ./config:/app/config
+      - ./data:/app/data
+    environment:
+      # Ver dashboard/app.py: 0.0.0.0 es obligatorio dentro de un
+      # contenedor para que el mapeo de puertos de arriba funcione.
+      - FLASK_HOST=0.0.0.0
+      - FLASK_PORT=5000
+      # Placeholder documentado para la variante GPU opcional (ver
+      # DOCKER.md) -- no tiene ningún efecto en esta imagen CPU; se deja
+      # aquí, comentado, para que sea obvio dónde tocar si en el futuro se
+      # arranca este mismo compose contra Dockerfile.gpu.
+      # - NVIDIA_VISIBLE_DEVICES=all
+    # Sin bloque `deploy.resources.reservations.devices` aquí a propósito:
+    # ese es el mecanismo de Compose para pedir GPU, y este servicio es
+    # 100% CPU por defecto sin ninguna configuración especial. Ver
+    # DOCKER.md sección GPU para el compose alternativo que sí la pide.

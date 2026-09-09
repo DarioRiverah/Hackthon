@@ -1,0 +1,59 @@
+# --- Visión computacional / pipeline ---
+opencv-python
+ultralytics
+numpy
+pandas
+scipy
+pyyaml
+# `lap` (linear assignment problem solver): lo requiere el tracker
+# ByteTrack de Ultralytics (pipeline/detect_and_track.py y
+# detect_hand_positions.py llaman a model.track(...)) pero ultralytics NO
+# lo declara como dependencia de instalación -- lo pide en tiempo de
+# EJECUCIÓN vía su mecanismo de "AutoUpdate" (intenta un `pip install`
+# automático la primera vez que hace falta). Confirmado dockerizando el
+# proyecto (ver DOCKER.md / docs/architecture.md): sin esto, la primera
+# corrida real del pipeline dentro del contenedor intenta descargar `lap`
+# de internet a mitad de "Procesar video" -- justo lo que la imagen
+# horneada de modelos (ver Dockerfile) existe para evitar. Se fija acá
+# para que quede instalado en el build, nunca en tiempo de ejecución.
+lap>=0.5.12
+# `openvino`: runtime necesario para (a) convertir yolo26n.pt/yolov8n-pose.pt
+# a formato OpenVINO en tiempo de build (pipeline/export_openvino.py) y
+# (b) cargar esos modelos convertidos en tiempo de inferencia
+# (pipeline/detect_and_track.py:load_model()). Acelera la inferencia en
+# CPU -- ver DOCKER.md / docs/architecture.md para los tiempos reales
+# medidos. La conversión es 100% opcional/best-effort: si por lo que sea
+# no está disponible o falla, el pipeline sigue funcionando con los .pt
+# originales sin ningún cambio de comportamiento (ver export_openvino.py).
+openvino
+
+# --- Dashboard (Flask) ---
+# Ver docs/architecture.md sección 25: migración completa de Streamlit a
+# Flask + HTML/CSS/JS propio. La calibración de zonas ahora es un
+# <canvas> HTML5 con JavaScript propio (dashboard/static/js/calibration.js),
+# ya no depende de ningún paquete de Python para eso.
+flask
+matplotlib
+pillow
+reportlab
+
+# =============================================================================
+# NOTA SOBRE GPU (OPCIONAL, NO REQUERIDO)
+# =============================================================================
+# `pip install -r requirements.txt` instala PyTorch en su versión de SOLO CPU
+# (viene como dependencia de ultralytics). Esto es INTENCIONAL: garantiza que
+# el proyecto instale correctamente en cualquier máquina, tenga o no GPU.
+#
+# El sistema funciona correctamente en CPU (así se validó todo el proyecto).
+# Si tu máquina tiene una GPU NVIDIA, puedes acelerar el procesamiento
+# (~3x más rápido, medido con RTX 3050 -- ver docs/architecture.md sección 13)
+# instalando la versión de PyTorch con soporte CUDA POR SEPARADO, después de
+# este archivo:
+#
+#   1. pip uninstall torch torchvision torchaudio -y
+#   2. Ve a https://pytorch.org/get-started/locally/ y usa el selector
+#      (Windows + Pip + Python + tu versión de CUDA) para obtener el comando
+#      exacto y vigente -- la URL específica cambia con cada versión, por eso
+#      no se fija aquí un comando único que podría quedar desactualizado.
+#   3. Verifica con: python -c "import torch; print(torch.cuda.is_available())"
+# =============================================================================

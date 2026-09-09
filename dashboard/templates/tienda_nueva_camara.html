@@ -1,0 +1,40 @@
+{% extends partial_base %}
+{% block title %}Agregar cámara -- {{ current_tienda.label }}{% endblock %}
+{% block content %}
+
+<div class="panel">
+    <h4>Cámara nueva (subir un video)</h4>
+    <p class="caption">Lanza el mismo asistente de siempre (subir, recortar, calibrar, procesar) -- al terminar,
+    esta cámara queda registrada automáticamente bajo "{{ current_tienda.label }}".</p>
+    <form method="post" action="{{ url_for('main.tienda_nueva_camara', tienda_id=current_tienda.id) }}">
+        <input type="hidden" name="accion" value="nueva">
+        <div class="form-field">
+            <label for="camara_id">Identificador de la cámara (sin espacios, ej. {{ current_tienda.id }}_entrada)</label>
+            <input type="text" id="camara_id" name="camara_id" placeholder="ej. {{ current_tienda.id }}_entrada" required>
+        </div>
+        <button type="submit" class="btn btn-primary"><i data-lucide="video" class="icon"></i> Continuar al asistente</button>
+    </form>
+</div>
+
+{% if camaras_sin_asignar %}
+<div class="panel">
+    <h4>Vincular una cámara existente</h4>
+    <p class="caption">Estas cámaras ya tienen datos procesados en el sistema pero no pertenecen a ninguna
+    tienda todavía -- se puede usar, por ejemplo, para agrupar bajo una misma tienda cámaras que se probaron
+    por separado antes de que existiera esta funcionalidad.</p>
+    <form method="post" action="{{ url_for('main.tienda_nueva_camara', tienda_id=current_tienda.id) }}">
+        <input type="hidden" name="accion" value="vincular">
+        <div class="form-field">
+            <label for="camara_existente">Cámara existente sin asignar</label>
+            <select id="camara_existente" name="camara_existente">
+                {% for c in camaras_sin_asignar %}
+                <option value="{{ c }}">{{ c }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn"><i data-lucide="link" class="icon"></i> Vincular a "{{ current_tienda.label }}"</button>
+    </form>
+</div>
+{% endif %}
+
+{% endblock %}

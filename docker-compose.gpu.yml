@@ -1,0 +1,37 @@
+# Variante GPU (OPCIONAL, secundaria -- ver DOCKER.md). Requiere una GPU
+# NVIDIA + Docker Desktop con WSL2/soporte de GPU ya funcionando. El
+# `docker-compose.yml` (sin sufijo) es el camino soportado por defecto,
+# 100% CPU -- este archivo NO lo reemplaza, es una variante aparte.
+#
+# Uso manual:
+#   docker compose -f docker-compose.gpu.yml up --build
+# (docker-run.sh / docker-run.ps1 eligen automáticamente entre este
+# archivo y el de CPU según si detectan una GPU utilizable.)
+services:
+  retail-vision:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
+    environment:
+      - FLASK_HOST=0.0.0.0
+      - FLASK_PORT=5000
+    # Mecanismo estándar de la Compose Specification para pedir GPU sin
+    # necesitar Swarm ni ningún plugin de NVIDIA aparte -- Docker Desktop
+    # (Compose v2) lo interpreta directamente vía su integración con el
+    # NVIDIA Container Toolkit. Si la máquina no tiene GPU o el runtime
+    # no está configurado, `docker compose up` con este archivo falla al
+    # arrancar el contenedor -- por eso este archivo NUNCA es el default
+    # (ver docker-compose.yml) y docker-run.sh/.ps1 verifican la GPU
+    # ANTES de elegirlo.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

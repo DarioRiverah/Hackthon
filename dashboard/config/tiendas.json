@@ -1,0 +1,12 @@
+{
+  "tienda_prueba_modulo": {
+    "label": "Tienda Prueba Modulo",
+    "camaras": [
+      "merl_demo"
+    ]
+  },
+  "otra": {
+    "label": "Otra",
+    "camaras": []
+  }
+}

@@ -1,0 +1,25 @@
+[theme]
+primaryColor = "#E8543E"
+backgroundColor = "#EEF1F4"
+secondaryBackgroundColor = "#E3E8ED"
+textColor = "#1A2333"
+
+# Antes: font = "sans serif" -- con ESPACIO, no es un valor válido (el
+# enum real de Streamlit usa guion: "sans-serif"/"serif"/"monospace").
+# Un valor inválido sin ":" se trata como un nombre de fuente literal
+# inexistente, así que el navegador termina cayendo a su fuente por
+# defecto (que en la mayoría de navegadores es serif) -- causa raíz
+# confirmada del defecto "los títulos se ven en serif" (ver
+# docs/architecture.md, sección 24).
+#
+# Ahora se usa el mecanismo NATIVO de Streamlit para cargar fuentes de
+# Google Fonts (formato "<nombre>:<url>", documentado en
+# streamlit/config.py y streamlit/runtime/theme_util.py) -- Streamlit
+# inyecta un <link rel="stylesheet"> real en la página por cada fuente,
+# más robusto que un @import dentro de un <style> insertado dinámicamente
+# (que es como se intentó antes, en dashboard/assets/theme.css). La URL
+# de Google Fonts solo puede traer UNA familia por entrada (Streamlit
+# rechaza URLs con más de un "family=") -- por eso son dos líneas
+# separadas, no la URL combinada que tenía el @import original.
+font = "IBM Plex Sans:https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+headingFont = "Manrope:https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap"

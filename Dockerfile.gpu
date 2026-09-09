@@ -1,0 +1,66 @@
+# =============================================================================
+# retail-vision-mvp -- variante GPU (OPCIONAL, secundaria -- ver DOCKER.md).
+# NO es el camino soportado por defecto: requiere Docker Desktop con
+# backend WSL2 + soporte de GPU NVIDIA ya funcionando en la máquina host.
+# El `docker-compose.yml` de este proyecto usa el Dockerfile CPU (raíz);
+# esta imagen se construye y corre aparte, a mano, solo si tu máquina la
+# soporta -- ver DOCKER.md sección "Variante GPU".
+# =============================================================================
+FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04
+
+# DEBIAN_FRONTEND=noninteractive es OBLIGATORIO acá: la imagen base de
+# NVIDIA no trae `tzdata` preconfigurado, y `python3.13-dev` (más abajo)
+# lo arrastra como dependencia nueva -- sin esto, `apt-get install` se
+# queda esperando para siempre un "Geographic area:" por stdin (que
+# nunca llega en un build no interactivo), y el build cuelga
+# indefinidamente en vez de fallar rápido. Confirmado de la forma difícil:
+# un primer intento de esta imagen se quedó colgado exactamente ahí.
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Etc/UTC
+
+# Python 3.13 vía deadsnakes -- la imagen base de NVIDIA (Ubuntu 22.04)
+# trae Python 3.10 por defecto, no la versión que usa este proyecto (ver
+# Dockerfile CPU / docs/architecture.md). curl + ca-certificates se
+# instalan en esta misma capa porque hacen falta para bootstrapear pip
+# (no viene con deadsnakes) en el siguiente paso.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        software-properties-common curl ca-certificates \
+    && add-apt-repository -y ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y --no-install-recommends \
+        python3.13 python3.13-venv python3.13-dev \
+        libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.13 1 \
+    && curl -sS https://bootstrap.pypa.io/get-pip.py | python3.13
+
+WORKDIR /app
+
+COPY requirements.txt .
+
+# Única diferencia real con el Dockerfile CPU: PyTorch con soporte CUDA
+# 12.4 (coincide con la imagen base `nvidia/cuda:12.4.1-*`) en vez de la
+# build CPU-only.
+RUN python3.13 -m pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cu124 \
+        torch torchvision
+
+# --ignore-installed es necesario acá (y NO en el Dockerfile CPU, que
+# parte de una imagen `python:3.13-slim` limpia sin ningún paquete de
+# Python preinstalado por apt): la imagen base de NVIDIA (Ubuntu 22.04)
+# trae `python3-blinker` preinstalado vía apt como paquete "distutils"
+# del sistema, y pip se niega (y directamente se cuelga sin salir,
+# confirmado de la forma difícil -- ver docs/architecture.md) al
+# intentar reemplazarlo por la versión que pide `flask`. Ignorar esa
+# instalación previa del sistema y dejar que pip instale su propia
+# copia en site-packages evita el conflicto sin afectar nada más.
+RUN python3.13 -m pip install --no-cache-dir --ignore-installed -r requirements.txt
+
+RUN python3.13 -c "from ultralytics import YOLO; YOLO('yolo26n.pt'); YOLO('yolov8n-pose.pt')"
+
+COPY . .
+
+EXPOSE 5000
+ENV FLASK_HOST=0.0.0.0
+ENV FLASK_PORT=5000
+
+CMD ["python3.13", "dashboard/app.py"]

@@ -1,0 +1,39 @@
+{
+  "store_name": "entrada principal",
+  "video_reference": "data/raw\\entrada principal.mp4",
+  "frame_width": 920,
+  "frame_height": 680,
+  "zones": [
+    {
+      "id": "Embutidos",
+      "label": "Embutidos",
+      "polygon": [
+        [
+          192,
+          48
+        ],
+        [
+          904,
+          51
+        ],
+        [
+          872,
+          272
+        ],
+        [
+          771,
+          586
+        ],
+        [
+          338,
+          578
+        ],
+        [
+          200,
+          249
+        ]
+      ],
+      "dwell_threshold_seconds": 2.0
+    }
+  ]
+}

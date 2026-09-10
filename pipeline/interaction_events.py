@@ -6,6 +6,12 @@ pero aplicada a la posición de la MANO en vez del cuerpo completo. Esto
 convierte la secuencia de posiciones de muñeca en "eventos de interacción":
 cada vez que la mano entra y sale de la zona del estante.
 
+Ambas muñecas (izquierda y derecha, columna "hand_side" del CSV de manos)
+se tratan como DOS puntos de contacto independientes: se segmentan por
+separado (para no fragmentar espuriamente un evento cuando una mano está
+dentro de la zona y la otra afuera en el mismo cuadro), y cualquiera de
+las dos entrando a la zona cuenta como una interacción.
+
 ALCANCE HONESTO (ya establecido desde el plan original del proyecto):
 este script detecta y cuantifica LA INTERACCIÓN FÍSICA (frecuencia,
 duración), pero NO distingue con certeza si el evento fue una "toma"
@@ -159,10 +165,30 @@ def main():
     print(f"Posiciones de mano fuera de cualquier zona: {n_outside}/{len(df_zoned)} "
           f"({n_outside/len(df_zoned)*100:.1f}%)")
 
+    # Si el CSV trae ambas muñecas por separado (columna hand_side), se
+    # segmenta cada mano de forma INDEPENDIENTE -- de lo contrario, una
+    # persona con una mano dentro de la zona y la otra afuera en el mismo
+    # cuadro generaría un "entra/sale" espurio en cada cuadro, en vez de
+    # reflejar que cualquiera de las dos manos ya cuenta como interacción.
+    has_hand_side = "hand_side" in df_zoned.columns
+    if has_hand_side:
+        df_zoned["_dwell_id"] = (
+            df_zoned[args.id_column].astype(str) + "::" + df_zoned["hand_side"].astype(str)
+        )
+        dwell_id_column = "_dwell_id"
+    else:
+        dwell_id_column = args.id_column
+
     # Reutilizamos la MISMA función de segmentación que zoning.py -- la
     # lógica de "entra y sale de una zona" es idéntica sea el punto de
     # referencia el cuerpo completo o la mano.
-    events_df = compute_dwell_events(df_zoned, zones, args.id_column)
+    events_df = compute_dwell_events(df_zoned, zones, dwell_id_column)
+
+    if has_hand_side and not events_df.empty:
+        split = events_df[dwell_id_column].str.split("::", n=1, expand=True)
+        events_df[args.id_column] = split[0]
+        events_df["hand_side"] = split[1]
+        events_df = events_df.drop(columns=[dwell_id_column])
 
     if not events_df.empty:
         events_df["intensity"] = events_df["duration_seconds"].apply(classify_interaction_intensity)

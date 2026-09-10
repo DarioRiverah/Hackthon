@@ -53,12 +53,11 @@ def _processed_output_paths(camara_id: str) -> list:
             f"data/output/spaghetti_{video_basename}.png",
             f"data/processed/tracks_{video_basename}.csv",
             f"data/processed/tracks_{video_basename}_stitched.csv",
-            f"data/processed/tracked_preview_{video_basename}.webm",
-            f"data/processed/tracked_preview_corregido_{video_basename}.webm",
             f"data/processed/hands_{video_basename}.csv",
             f"data/processed/hands_{video_basename}_stitched.csv",
-            f"data/processed/hands_preview_{video_basename}.webm",
-            f"data/processed/hands_preview_corregido_{video_basename}.webm",
+            f"data/processed/keypoints_{video_basename}.csv",
+            f"data/processed/tracked_preview_{video_basename}.webm",
+            f"data/processed/preview_corregido_{video_basename}.webm",
         ]
     return [p for p in candidates if os.path.exists(p)]
 

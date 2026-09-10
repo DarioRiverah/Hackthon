@@ -103,6 +103,24 @@ def report_pdf(store_name):
         }
         heatmap_paths = {label: path for label, path in candidatos.items() if os.path.exists(path)}
 
+    # "Plano de la tienda" -- la pestaña Mapas del dashboard la muestra
+    # PRIMERO, junto a los heatmaps (ver templates/results.html), pero el
+    # PDF nunca la incluía porque /api/store/<...>/layout-plot.png la
+    # genera al vuelo (BytesIO, sin tocar disco). Se renderiza con la
+    # MISMA función (layout_view.render_layout_plot) y esta vez sí se
+    # guarda a disco para que report_generator.py pueda incrustarla como
+    # una imagen más -- reutiliza _fitted_image() y su límite de tamaño,
+    # nada de lógica nueva de layout ahí.
+    import matplotlib.pyplot as plt
+    layout_plot_path = f"data/output/layout_plot_{store_name}.png"
+    fig = layout_view.render_layout_plot(
+        zones_config["zones"], summary_df,
+        zones_config["frame_width"], zones_config["frame_height"],
+    )
+    fig.savefig(layout_plot_path, format="png", dpi=110)
+    plt.close(fig)
+    heatmap_paths = {"Plano de la tienda": layout_plot_path, **heatmap_paths}
+
     # Resumen narrado agregado (Historia) -- mismo camino que ya usa
     # main_routes.py: cargar los eventos crudos y armar zone_labels
     # desde zones_config, no desde summary_df (zones_config es la
@@ -159,6 +177,26 @@ def simulate(store_name):
     return jsonify(result)
 
 
+@api_bp.route("/store/<store_name>/simulate/recommend", methods=["POST"])
+def simulate_recommend(store_name):
+    """Dado solo el origen, prueba TODAS las demás zonas de la cámara
+    como destino (reutilizando simulator.run_simulation() por dentro de
+    simulator.recommend_best_destination()) y devuelve la de mejor
+    cambio_pct -- o, si ninguna mejora, un error honesto en vez de una
+    recomendación forzada."""
+    data = request.get_json(force=True)
+    from_id = data.get("from_id")
+    if not from_id:
+        return jsonify({"ok": False, "error": "Falta la zona de origen."}), 400
+
+    summary_df, _, interaction_df = store_service.load_store_data(store_name)
+    if summary_df is None:
+        return jsonify({"ok": False, "error": "No se encontraron datos de esta tienda."}), 404
+
+    result = simulator.recommend_best_destination(summary_df, interaction_df, from_id)
+    return jsonify(result)
+
+
 @api_bp.route("/tienda/<tienda_id>/simulate", methods=["POST"])
 def tienda_simulate(tienda_id):
     """Análogo a /store/<store_name>/simulate pero para la vista
@@ -175,6 +213,25 @@ def tienda_simulate(tienda_id):
     interaction_combinado = tienda_service.get_interaction_summary_combinado(tienda_id)
 
     result = simulator.run_simulation_multi(zone_summary_combinado, interaction_combinado, from_id, to_id)
+    return jsonify(result)
+
+
+@api_bp.route("/tienda/<tienda_id>/simulate/recommend", methods=["POST"])
+def tienda_simulate_recommend(tienda_id):
+    """Análogo a /store/<store_name>/simulate/recommend pero para la
+    vista combinada de tienda -- las candidatas cruzan TODAS las
+    cámaras de la tienda (ver simulator.recommend_best_destination_multi)."""
+    data = request.get_json(force=True)
+    from_id = data.get("from_id")
+    if not from_id:
+        return jsonify({"ok": False, "error": "Falta la zona de origen."}), 400
+
+    zone_summary_combinado, _ = tienda_service.get_zone_summary_combinado(tienda_id)
+    if zone_summary_combinado.empty:
+        return jsonify({"ok": False, "error": "No se encontraron datos de esta tienda."}), 404
+    interaction_combinado = tienda_service.get_interaction_summary_combinado(tienda_id)
+
+    result = simulator.recommend_best_destination_multi(zone_summary_combinado, interaction_combinado, from_id)
     return jsonify(result)
 
 
@@ -230,11 +287,17 @@ def generate_preview(store_name):
         return jsonify({"ok": False, "error": "Falta la ruta del video."}), 400
 
     job_key = f"{store_name}:preview"
-    started = job_manager.start_job(
+    started, blocked_by = job_manager.start_job(
         job_key, [_sys.executable, "pipeline/detect_and_track.py", "--video", video_path],
-        retry_env={"DISABLE_OPENVINO": "1"},
+        retry_env={"DISABLE_OPENVINO": "1"}, exclusive=True,
     )
-    return jsonify({"ok": True, "started": started, "job_key": job_key})
+    if not started:
+        return jsonify({
+            "ok": False, "busy": True,
+            "error": f"Ya hay un trabajo en curso ({blocked_by}). Solo se puede procesar un video a la "
+                     f"vez -- espera a que termine para no saturar la GPU/CPU.",
+        })
+    return jsonify({"ok": True, "started": True, "job_key": job_key})
 
 
 @api_bp.route("/store/<store_name>/process", methods=["POST"])
@@ -246,6 +309,10 @@ def process(store_name):
     if not video_path:
         return jsonify({"ok": False, "error": "Falta la ruta del video."}), 400
 
+    device = payload.get("device", "auto")
+    if device not in ("auto", "cpu", "gpu"):
+        return jsonify({"ok": False, "error": f"Dispositivo inválido: '{device}'."}), 400
+
     command = [
         _sys.executable, "pipeline/run_pipeline.py",
         "--video", video_path, "--store-name", store_name,
@@ -253,6 +320,7 @@ def process(store_name):
         "--body-max-speed", str(payload.get("body_max_speed", 500.0)),
         "--hand-max-gap", str(payload.get("hand_max_gap", 5.0)),
         "--hand-max-speed", str(payload.get("hand_max_speed", 300.0)),
+        "--device", device,
     ]
     if payload.get("skip_hands"):
         command.append("--skip-hands")
@@ -262,8 +330,14 @@ def process(store_name):
             command.extend(["--run-date", payload["run_date"]])
 
     job_key = f"{store_name}:process"
-    started = job_manager.start_job(job_key, command)
-    return jsonify({"ok": True, "started": started, "job_key": job_key})
+    started, blocked_by = job_manager.start_job(job_key, command, exclusive=True)
+    if not started:
+        return jsonify({
+            "ok": False, "busy": True,
+            "error": f"Ya hay un trabajo en curso ({blocked_by}). Solo se puede procesar un video a la "
+                     f"vez -- espera a que termine para no saturar la GPU/CPU.",
+        })
+    return jsonify({"ok": True, "started": True, "job_key": job_key})
 
 
 @api_bp.route("/store/<store_name>/status")

@@ -41,19 +41,18 @@ RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu 
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Hornea los modelos YOLO usados por el pipeline en producción DENTRO de la
-# imagen -- ver pipeline/detect_and_track.py (yolo26n.pt, detección de
-# cuerpo) y pipeline/detect_hand_positions.py (yolov8n-pose.pt, detección
-# de manos); confirmado por lectura de pipeline/run_pipeline.py (la cadena
-# real que arma dashboard/job_manager.py) que estos son los ÚNICOS dos
-# modelos que la ruta de producción carga -- otros scripts del repo
-# (heatmap_ultralytics.py, experimental_yoloe_product_test.py) usan otros
-# pesos pero no forman parte de esta cadena, así que no se hornean.
+# Hornea el modelo YOLO usado por el pipeline en producción DENTRO de la
+# imagen -- ver pipeline/detect_and_track.py (yolo26n-pose.pt, detección
+# de cuerpo Y de mano en una sola pasada); confirmado por lectura de
+# pipeline/run_pipeline.py (la cadena real que arma dashboard/job_manager.py)
+# que este es el ÚNICO modelo que la ruta de producción carga -- otros
+# scripts del repo (heatmap_ultralytics.py, experimental_yoloe_product_test.py)
+# usan otros pesos pero no forman parte de esta cadena, así que no se hornean.
 # `YOLO("nombre.pt")` descarga el peso oficial de Ultralytics la primera
 # vez que se instancia si no lo encuentra en el cache local -- forzar esa
 # descarga aquí, en build time, es lo que garantiza que el contenedor
 # arranque 100% offline en la demo (ver docs/architecture.md).
-RUN python -c "from ultralytics import YOLO; YOLO('yolo26n.pt'); YOLO('yolov8n-pose.pt')"
+RUN python -c "from ultralytics import YOLO; YOLO('yolo26n-pose.pt')"
 
 # Copia SOLO el script de conversión (no todo el código todavía) para que
 # esta capa -- que descarga/convierte modelos, no cambia con cada edición
@@ -61,7 +60,7 @@ RUN python -c "from ultralytics import YOLO; YOLO('yolo26n.pt'); YOLO('yolov8n-p
 # del código llega con el COPY . . de más abajo.
 COPY pipeline/export_openvino.py pipeline/export_openvino.py
 
-# Convierte los modelos a formato OpenVINO (acelera inferencia en CPU) --
+# Convierte el modelo a formato OpenVINO (acelera inferencia en CPU) --
 # ver pipeline/export_openvino.py para la RED DE SEGURIDAD completa: ese
 # script SIEMPRE termina en 0 pase lo que pase, así que este RUN nunca
 # puede tumbar el build. Si la conversión falla, el pipeline sigue

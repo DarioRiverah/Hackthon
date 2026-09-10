@@ -19,11 +19,11 @@ Alcance deliberado -- qué SÍ y qué NO se archiva:
       que la vista histórica pueda mostrar las etiquetas/clasificación
       de zona tal como eran en ese momento, sin depender de que la
       calibración actual no haya cambiado).
-  NO: los videos de verificación de tracking (tracked_preview_corregido_*.webm,
-      hands_preview_corregido_*.webm). Son herramientas de control de
-      calidad técnico (¿se siguió bien a cada persona?), no contenido
+  NO: el video de verificación de tracking (preview_corregido_*.webm,
+      caja de cuerpo + punto de muñeca superpuestos). Es una herramienta
+      de control de calidad técnico (¿se siguió bien a cada persona?), no contenido
       que el dueño de la tienda necesite revisar por fecha histórica --
-      y pesan ~decenas-cientos de MB cada uno, lo que volvería el
+      y pesa ~decenas-cientos de MB, lo que volvería el
       archivado insostenible en disco corrida tras corrida. La vista
       histórica de Mapas simplemente no ofrece el expander de video
       para una fecha archivada (ver dashboard/templates/results.html).

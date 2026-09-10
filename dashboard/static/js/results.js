@@ -25,6 +25,13 @@ window.initResultsPage = function initResultsPage() {
         _trendsChart.destroy();
         _trendsChart = null;
     }
+    _interactionCharts.forEach((c) => c.destroy());
+    _interactionCharts = [];
+    if (_interactionCompareChart) {
+        _interactionCompareChart.destroy();
+        _interactionCompareChart = null;
+    }
+    _interactionChartsInitialized = false;
     initTabs();
     initSimulator();
 };
@@ -42,8 +49,95 @@ function initTabs() {
             btn.classList.add("active");
             document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
             if (btn.dataset.tab === "tendencias") initTrendsChart();
+            if (btn.dataset.tab === "interaccion") initInteractionCharts();
         });
     });
+}
+
+// Dona por zona + barra horizontal comparativa (Chart.js) en la pestaña
+// "Interacción con producto" -- igual que initTrendsChart(), se inicializa
+// recién al ABRIR la pestaña por primera vez, no al cargar la página: un
+// <canvas> dentro de un .tab-panel oculto (display:none) mide 0x0.
+let _interactionCharts = [];
+let _interactionCompareChart = null;
+let _interactionChartsInitialized = false;
+function initInteractionCharts() {
+    if (_interactionChartsInitialized) return;
+    const dataEl = document.getElementById("interaction-cards-data");
+    if (!dataEl || !window.Chart) return;
+    _interactionChartsInitialized = true;
+
+    const cards = JSON.parse(dataEl.textContent);
+    const style = getComputedStyle(document.documentElement);
+    const colorBreves = style.getPropertyValue("--color-cold").trim();
+    const colorMedias = style.getPropertyValue("--color-zone-paso").trim();
+    const colorProlongadas = style.getPropertyValue("--color-hot").trim();
+    const panelBg = style.getPropertyValue("--color-panel").trim();
+    const inkMuted = style.getPropertyValue("--color-ink-muted").trim();
+    const gridLine = style.getPropertyValue("--color-line").trim();
+    // Misma paleta (mismo orden) que ya usa initTrendsChart() para sus
+    // líneas -- una zona = un color, consistente entre pestañas.
+    const zonePalette = [
+        "--color-hot", "--color-cold", "--color-zone-paso",
+        "--color-info", "--color-zone-nicho", "--color-success",
+    ].map((v) => style.getPropertyValue(v).trim());
+
+    document.querySelectorAll(".cc-donut-canvas").forEach((canvas) => {
+        const card = cards[Number(canvas.dataset.zoneIndex)];
+        if (!card) return;
+
+        // Los segmentos en 0 (ej. "0 medias") se OMITEN del todo, no se
+        // dibujan como un hueco gris -- así la dona nunca se ve rota o
+        // como si faltara un dato.
+        const allLabels = ["Breves", "Medias", "Prolongadas"];
+        const allValues = [card.toques_breves, card.interacciones_medias, card.interacciones_prolongadas];
+        const allColors = [colorBreves, colorMedias, colorProlongadas];
+        const labels = [], values = [], colors = [];
+        allValues.forEach((v, i) => {
+            if (v > 0) { labels.push(allLabels[i]); values.push(v); colors.push(allColors[i]); }
+        });
+        if (values.length === 0) return;
+
+        _interactionCharts.push(new Chart(canvas.getContext("2d"), {
+            type: "doughnut",
+            data: { labels, datasets: [{ data: values, backgroundColor: colors, borderColor: panelBg, borderWidth: 2 }] },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: "62%",
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${ctx.parsed} interacción(es)` } },
+                },
+            },
+        }));
+    });
+
+    const compareCanvas = document.getElementById("interaction-compare-chart");
+    if (compareCanvas && cards.length > 1) {
+        _interactionCompareChart = new Chart(compareCanvas.getContext("2d"), {
+            type: "bar",
+            data: {
+                labels: cards.map((c) => c.zone_label),
+                datasets: [{
+                    label: "Interacciones totales",
+                    data: cards.map((c) => c.total_interactions),
+                    backgroundColor: cards.map((_, i) => zonePalette[i % zonePalette.length]),
+                    borderRadius: 4,
+                }],
+            },
+            options: {
+                indexAxis: "y",
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { color: gridLine }, ticks: { color: inkMuted, font: { size: 11 } }, beginAtZero: true },
+                    y: { grid: { display: false }, ticks: { color: inkMuted, font: { size: 11 } } },
+                },
+            },
+        });
+    }
 }
 
 // Gráfico de evolución histórica (Chart.js) -- se inicializa recién la
@@ -143,6 +237,47 @@ function initTrendsChart() {
     if (agrupacionSelect) agrupacionSelect.addEventListener("change", render);
 }
 
+// Arma el panel de resultado -- compartido entre "Simular" (destino
+// elegido a mano) y "Recomendarme el mejor destino" (destino elegido
+// por recommend_best_destination()) para no duplicar el mensaje/HTML.
+// recommendMeta (opcional): { nEvaluados } -- cuando viene, antepone un
+// aviso explícito de qué zona se recomendó y contra cuántas se comparó
+// (transparencia total sobre qué se comparó, nunca solo el resultado).
+function buildSimResultHtml(data, recommendMeta) {
+    const r = data.result;
+    const positive = r.cambio_pct > 0;
+    const messageKind = positive ? "success" : "info";
+    const message = positive
+        ? `Si el producto de '${data.from_label}' generara el mismo interés por visitante en ` +
+          `'${data.to_label}' (que tiene más tráfico: ${data.visits_to.toFixed(0)} vs ${data.visits_from.toFixed(0)} ` +
+          `visitas), podría pasar de ${r.interacciones_actuales.toFixed(0)} a ${r.interacciones_simuladas.toFixed(1)} ` +
+          `interacciones -- un aumento estimado de ${r.cambio_pct.toFixed(0)}%.`
+        : `'${data.to_label}' tiene menos tráfico que '${data.from_label}' ` +
+          `(${data.visits_to.toFixed(0)} vs ${data.visits_from.toFixed(0)} visitas), así que este movimiento ` +
+          `probablemente reduciría la interacción total, no la aumentaría.`;
+
+    const recommendBanner = recommendMeta
+        ? `<div style="margin-bottom:var(--space-4);">${window.alertHtml(
+              "success",
+              `Recomendación: comparamos '${escapeHtml(data.from_label)}' contra ${recommendMeta.nEvaluados} ` +
+              `zona(s) candidata(s) disponibles -- el mejor destino encontrado es <strong>'${escapeHtml(data.to_label)}'</strong>.`
+          )}</div>`
+        : "";
+
+    return `
+        <div class="panel">
+            <h4>Resultado de la simulación</h4>
+            ${recommendBanner}
+            <div class="metric-row">
+                <div class="metric"><div class="metric-label">Interacciones actuales</div><div class="metric-value">${r.interacciones_actuales.toFixed(0)}</div></div>
+                <div class="metric"><div class="metric-label">Interacciones estimadas en '${escapeHtml(data.to_label)}'</div><div class="metric-value">${r.interacciones_simuladas.toFixed(1)}</div></div>
+                <div class="metric"><div class="metric-label">Cambio estimado</div><div class="metric-value">${r.cambio_pct >= 0 ? "+" : ""}${r.cambio_pct.toFixed(0)}%</div></div>
+            </div>
+            <div style="margin-top:var(--space-4);">${window.alertHtml(messageKind, message)}</div>
+            <p class="caption">Recuerda: esta es una extrapolación basada en el patrón de tráfico observado, asumiendo que el interés del producto por visitante no cambia entre zonas.</p>
+        </div>`;
+}
+
 function initSimulator() {
     const runBtn = document.getElementById("sim-run-btn");
     if (!runBtn) return;
@@ -174,32 +309,50 @@ function initSimulator() {
                 return;
             }
 
-            const r = data.result;
-            const positive = r.cambio_pct > 0;
-            const messageKind = positive ? "success" : "info";
-            const message = positive
-                ? `Si el producto de '${data.from_label}' generara el mismo interés por visitante en ` +
-                  `'${data.to_label}' (que tiene más tráfico: ${data.visits_to.toFixed(0)} vs ${data.visits_from.toFixed(0)} ` +
-                  `visitas), podría pasar de ${r.interacciones_actuales.toFixed(0)} a ${r.interacciones_simuladas.toFixed(1)} ` +
-                  `interacciones -- un aumento estimado de ${r.cambio_pct.toFixed(0)}%.`
-                : `'${data.to_label}' tiene menos tráfico que '${data.from_label}' ` +
-                  `(${data.visits_to.toFixed(0)} vs ${data.visits_from.toFixed(0)} visitas), así que este movimiento ` +
-                  `probablemente reduciría la interacción total, no la aumentaría.`;
-
-            resultDiv.innerHTML = `
-                <div class="panel">
-                    <h4>Resultado de la simulación</h4>
-                    <div class="metric-row">
-                        <div class="metric"><div class="metric-label">Interacciones actuales</div><div class="metric-value">${r.interacciones_actuales.toFixed(0)}</div></div>
-                        <div class="metric"><div class="metric-label">Interacciones estimadas en '${escapeHtml(data.to_label)}'</div><div class="metric-value">${r.interacciones_simuladas.toFixed(1)}</div></div>
-                        <div class="metric"><div class="metric-label">Cambio estimado</div><div class="metric-value">${r.cambio_pct >= 0 ? "+" : ""}${r.cambio_pct.toFixed(0)}%</div></div>
-                    </div>
-                    <div style="margin-top:var(--space-4);">${window.alertHtml(messageKind, message)}</div>
-                    <p class="caption">Recuerda: esta es una extrapolación basada en el patrón de tráfico observado, asumiendo que el interés del producto por visitante no cambia entre zonas.</p>
-                </div>`;
+            resultDiv.innerHTML = buildSimResultHtml(data);
             window.refreshIcons();
         } catch (err) {
             resultDiv.innerHTML = window.alertHtml("error", "No se pudo calcular la simulación. Intenta de nuevo.");
+            window.refreshIcons();
+        }
+    });
+
+    const recommendBtn = document.getElementById("sim-recommend-btn");
+    if (!recommendBtn) return;
+
+    recommendBtn.addEventListener("click", async () => {
+        const store = recommendBtn.dataset.store;
+        const fromId = document.getElementById("sim-from").value;
+        const toSelect = document.getElementById("sim-to");
+        const resultDiv = document.getElementById("sim-result");
+
+        resultDiv.innerHTML = '<p class="caption">Comparando contra todas las zonas candidatas...</p>';
+        try {
+            const resp = await fetch(`/api/store/${encodeURIComponent(store)}/simulate/recommend`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ from_id: fromId }),
+            });
+            const data = await resp.json();
+
+            if (!data.ok) {
+                // no_improvement: la zona ya está bien ubicada -- es una
+                // respuesta honesta, no un error real, así que se muestra
+                // como "info" en vez de "warning".
+                resultDiv.innerHTML = window.alertHtml(data.no_improvement ? "info" : "warning", escapeHtml(data.error));
+                window.refreshIcons();
+                return;
+            }
+
+            // Auto-completa el selector manual con el destino recomendado
+            // -- el control manual sigue ahí para quien prefiera elegir
+            // otra combinación después de ver la recomendación.
+            if (data.to_id != null && toSelect) toSelect.value = data.to_id;
+
+            resultDiv.innerHTML = buildSimResultHtml(data, { nEvaluados: data.n_candidatos_evaluados });
+            window.refreshIcons();
+        } catch (err) {
+            resultDiv.innerHTML = window.alertHtml("error", "No se pudo calcular la recomendación. Intenta de nuevo.");
             window.refreshIcons();
         }
     });

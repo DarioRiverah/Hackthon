@@ -1,0 +1,57 @@
+{% extends partial_base %}
+{% block title %}Configuración -- Retailytics{% endblock %}
+{% block content %}
+<div class="panel" style="max-width:520px;">
+    <h4><i data-lucide="user" class="icon"></i> Cuenta</h4>
+    <p class="caption">Usuario: <strong>{{ username }}</strong></p>
+</div>
+
+<div class="panel" style="max-width:520px;">
+    <h4><i data-lucide="lock" class="icon"></i> Cambiar contraseña</h4>
+    <div id="password-alert"></div>
+    <form id="change-password-form">
+        <div class="form-field">
+            <label for="current-password">Contraseña actual</label>
+            <input type="password" id="current-password" autocomplete="current-password" required>
+        </div>
+        <div class="form-field">
+            <label for="new-password">Contraseña nueva (mínimo 8 caracteres)</label>
+            <input type="password" id="new-password" autocomplete="new-password" minlength="8" required>
+        </div>
+        <button type="submit" class="btn btn-primary"><i data-lucide="check" class="icon"></i> Cambiar contraseña</button>
+    </form>
+</div>
+
+<div class="panel" style="max-width:520px;">
+    <h4><i data-lucide="hand" class="icon"></i> Patrón de manos</h4>
+    <p class="caption">
+        {% if has_pattern %}Ya tenés un patrón de 4 poses registrado -- podés reemplazarlo por uno nuevo.
+        {% else %}Todavía no registraste un patrón de manos -- es una forma alternativa de iniciar sesión, sin escribir tu contraseña.{% endif %}
+    </p>
+    <div id="pattern-alert"></div>
+
+    <div id="pattern-idle-view">
+        <button type="button" class="btn" id="start-pattern-btn">
+            <i data-lucide="video" class="icon"></i> {{ 'Volver a registrar el patrón' if has_pattern else 'Registrar patrón de manos' }}
+        </button>
+    </div>
+
+    <div id="pattern-capture-view" hidden>
+        <p class="caption" id="settings-pattern-status">Preparando la cámara...</p>
+        <div style="position:relative; width:100%; max-width:320px; margin:0 auto var(--space-4); border-radius:var(--radius-panel); overflow:hidden; background:#000;">
+            <video id="settings-pattern-video" muted playsinline style="width:100%; display:block; transform:scaleX(-1); opacity:0; position:absolute;"></video>
+            <canvas id="settings-pattern-canvas" style="width:100%; display:block; transform:scaleX(-1);"></canvas>
+        </div>
+        <div style="display:flex; gap:var(--space-2); justify-content:center; margin:var(--space-3) 0;" id="settings-pattern-progress">
+            <span class="dot" style="width:12px;height:12px;border-radius:50%;background:var(--color-line);"></span>
+            <span class="dot" style="width:12px;height:12px;border-radius:50%;background:var(--color-line);"></span>
+            <span class="dot" style="width:12px;height:12px;border-radius:50%;background:var(--color-line);"></span>
+            <span class="dot" style="width:12px;height:12px;border-radius:50%;background:var(--color-line);"></span>
+        </div>
+        <div class="panel-row">
+            <button type="button" class="btn" id="settings-capture-btn" style="flex:1; justify-content:center;"><i data-lucide="camera" class="icon"></i> Capturar esta pose</button>
+            <button type="button" class="btn" id="settings-cancel-btn" style="flex:1; justify-content:center;"><i data-lucide="x" class="icon"></i> Cancelar</button>
+        </div>
+    </div>
+</div>
+{% endblock %}

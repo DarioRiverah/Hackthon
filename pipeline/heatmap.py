@@ -41,7 +41,8 @@ def parse_args():
     parser.add_argument("--mode", type=str, default="flujo", choices=["flujo", "interaccion", "combinado"],
                          help="'flujo' (default): heatmap de posición corporal (tráfico/permanencia). "
                               "'interaccion': heatmap de posición de mano (qué se toca del estante) -- "
-                              "usa --tracks apuntando a un CSV de manos (detect_hand_positions.py). "
+                              "usa --tracks apuntando a un CSV de manos (hands_*.csv, generado por "
+                              "detect_and_track.py). "
                               "'combinado': color = tráfico corporal, contorno blanco = interacción de "
                               "mano -- requiere --tracks (cuerpo) y --hand-tracks (mano)")
     parser.add_argument("--hand-tracks", type=str, default=None,

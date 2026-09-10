@@ -6,12 +6,16 @@ todo lo demás (zonas calibradas, resultados) ya vive en archivos.
 """
 
 import os
+import sys
 
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
 
 import store_service
 import tienda_service
 import video_utils
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "pipeline"))
+import device_utils
 
 setup_bp = Blueprint("setup", __name__, url_prefix="/setup")
 
@@ -50,6 +54,7 @@ def wizard():
         "duration": duration,
         "has_heat_preview": has_heat_preview,
         "zones_exist": zones_exist,
+        "gpu_info": device_utils.get_gpu_info(),
     })
     return render_template("setup.html", **context)
 

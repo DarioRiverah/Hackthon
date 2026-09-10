@@ -25,7 +25,7 @@
 </script>
 
 <meta name="color-scheme" content="light dark">
-<title>{% block title %}Space Management{% endblock %}</title>
+<title>{% block title %}Retailytics{% endblock %}</title>
 
 <!-- Fuentes vía <link> real en el <head> -- NO @import dentro de CSS
      (esa técnica causó un bug real de carga en la versión anterior con
@@ -52,9 +52,16 @@
     <aside class="sidebar">
         <div class="brand-row">
             <div>
-                <div class="brand">Space Management</div>
-                <div class="tagline">Flujo, permanencia e interacción -- sin identificar personas.</div>
+                <div class="brand">Retailytics</div>
+                <div class="tagline">Flujo, permanencia e interacción</div>
             </div>
+            <div class="brand-row-actions">
+            <a href="{{ url_for('auth.settings') }}" class="btn btn-sm" title="Configuración" aria-label="Configuración" style="padding:var(--space-1) var(--space-2);">
+                <i data-lucide="settings" class="icon" style="--icon-size:16px;"></i>
+            </a>
+            <button type="button" class="btn btn-sm" id="logout-btn" title="Cerrar sesión" aria-label="Cerrar sesión" style="padding:var(--space-1) var(--space-2);">
+                <i data-lucide="log-out" class="icon" style="--icon-size:16px;"></i>
+            </button>
             <label class="sky-toggle" title="Cambiar tema claro/oscuro" aria-label="Cambiar tema claro/oscuro">
                 <input type="checkbox" class="sky-toggle__checkbox" id="darkmode-toggle">
                 <div class="sky-toggle__container">
@@ -75,6 +82,7 @@
                     </div>
                 </div>
             </label>
+            </div>
         </div>
         {#
              Todo lo de acá hasta el cierre de </aside> es la "zona
@@ -165,17 +173,37 @@
 
     <main class="main-content">
         <div class="page-hero">
-            {% if current_store and current_tienda %}
-            <p class="caption" style="margin-bottom:var(--space-2);">
-                <a href="{{ url_for('main.tienda_home', tienda=current_tienda.id) }}">{{ current_tienda.label }}</a>
-                &nbsp;/&nbsp;cámara
-            </p>
-            {% endif %}
-            {% if current_store %}<h1>{{ current_store }}</h1>
-            {% elif current_tienda %}<h1>{{ current_tienda.label }}</h1>
-            {% else %}<h1>Space Management</h1>{% endif %}
+            <div class="page-hero-top">
+                <div class="page-hero-titles">
+                    {% if current_store and current_tienda %}
+                    <p class="caption" style="margin-bottom:var(--space-2);">
+                        <a href="{{ url_for('main.tienda_home', tienda=current_tienda.id) }}">{{ current_tienda.label }}</a>
+                        &nbsp;/&nbsp;cámara
+                    </p>
+                    {% endif %}
+                    {% if current_store %}<h1>{{ current_store }}</h1>
+                    {% elif current_tienda %}<h1>{{ current_tienda.label }}</h1>
+                    {% else %}<h1>Retailytics</h1>{% endif %}
+                </div>
+                <div class="page-hero-bell">
+                    <button type="button" class="job-bell-toggle" id="job-bell-toggle" aria-haspopup="dialog" aria-expanded="false" aria-controls="job-bell-panel" title="Notificaciones" aria-label="Notificaciones">
+                        <i data-lucide="bell" class="icon" style="--icon-size:19px;"></i>
+                        <span class="job-bell-dot" id="job-bell-dot" hidden></span>
+                    </button>
+                    <div class="job-bell-panel" id="job-bell-panel" role="dialog" aria-label="Notificaciones" style="display:none;">
+                        <div class="job-bell-header">
+                            <span><i data-lucide="bell" class="icon" style="--icon-size:16px;"></i> Notificaciones</span>
+                            <button type="button" class="job-bell-close" id="job-bell-close" aria-label="Cerrar notificaciones">
+                                <i data-lucide="x" class="icon" style="--icon-size:16px;"></i>
+                            </button>
+                        </div>
+                        <div class="job-bell-body" id="job-bell-body"></div>
+                    </div>
+                </div>
+            </div>
             {% block hero_extra %}{% endblock %}
         </div>
+        {% block section_tabs %}{% endblock %}
         {% block content %}{% endblock %}
     </main>
 </div>
@@ -201,6 +229,7 @@
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 <script src="{{ url_for('static', filename='js/help-content.js') }}"></script>
 <script src="{{ url_for('static', filename='js/help-widget.js') }}"></script>
+<script src="{{ url_for('static', filename='js/job-bell.js') }}"></script>
 <!-- Navegación sin recarga completa (ver main.js:navigateTo(), sección
      "PJAX" de docs/architecture.md): cada página puede reemplazar el
      contenido de OTRA sin volver a pedir su <script> -- así que los 5
@@ -214,6 +243,11 @@
 <script src="{{ url_for('static', filename='js/calibration.js') }}"></script>
 <script src="{{ url_for('static', filename='js/data_management.js') }}"></script>
 <script src="{{ url_for('static', filename='js/tienda_combinada.js') }}"></script>
+<!-- Módulo ES (export/import) -- necesario para @mediapipe/tasks-vision
+     (ver static/js/hand_pattern.js). Expone window.HandPatternCapture
+     para que settings.js (script normal) lo use. -->
+<script type="module" src="{{ url_for('static', filename='js/hand_pattern.js') }}"></script>
+<script src="{{ url_for('static', filename='js/settings.js') }}"></script>
 {% block extra_scripts %}{% endblock %}
 </body>
 </html>

@@ -24,13 +24,15 @@ Uso:
 import os
 import sys
 
-from flask import Flask, request
+from flask import Flask, g, jsonify, redirect, request, url_for
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from routes.main_routes import main_bp
 from routes.setup_routes import setup_bp
 from routes.api_routes import api_bp
+from routes.auth_routes import auth_bp, PUBLIC_AUTH_ENDPOINTS
+import jwt_service
 
 
 def create_app() -> Flask:
@@ -39,15 +41,41 @@ def create_app() -> Flask:
     # muy puntual -- la mayoría del estado real vive en archivos, no en
     # sesión (ver docstring del módulo). No es sensible (no guarda ninguna
     # credencial ni dato de negocio), así que un valor fijo por proceso es
-    # suficiente para este alcance.
+    # suficiente para este alcance. NO es la clave que firma la sesión de
+    # login (ver jwt_service.py: usa su propia clave aleatoria persistida
+    # en .secrets/, nunca este valor fijo del repo).
     app.secret_key = os.environ.get("FLASK_SECRET_KEY", "retail-vision-mvp-dev-key")
 
     # Límite generoso de subida (videos pueden pesar varias decenas de MB).
-    app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024 * 1024  # 2 GB
+    app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024 * 1024  # 2 GB importar en docker
 
     app.register_blueprint(main_bp)
     app.register_blueprint(setup_bp)
     app.register_blueprint(api_bp)
+    app.register_blueprint(auth_bp)
+
+    @app.before_request
+    def require_auth():
+        """Protege TODAS las rutas existentes detrás de una sesión JWT
+        válida (cookie HttpOnly, ver jwt_service.py) -- solo login/registro
+        inicial (PUBLIC_AUTH_ENDPOINTS, ver routes/auth_routes.py) y los
+        archivos estáticos quedan afuera. Sin sesión válida: las rutas de
+        API (/api/...) responden 401 JSON (las consume fetch(), no tiene
+        sentido devolverles una redirección HTML); todo lo demás
+        redirige a /login -- incluida la navegación sin recarga (ver
+        static/js/main.js:navigateTo()), que ya trata cualquier respuesta
+        no-200 o sin los fragmentos #pjax-main/#pjax-sidebar esperados
+        como señal para recargar la página completa, así que termina en
+        /login igual sin necesitar ningún cambio ahí."""
+        if request.endpoint is None or request.endpoint == "static" or request.endpoint in PUBLIC_AUTH_ENDPOINTS:
+            return None
+        username = jwt_service.verify_token(request.cookies.get(jwt_service.COOKIE_NAME))
+        if username is None:
+            if request.path.startswith("/api/"):
+                return jsonify({"ok": False, "error": "No autenticado."}), 401
+            return redirect(url_for("auth.login"))
+        g.current_user = username
+        return None
 
     @app.context_processor
     def inject_partial_base():

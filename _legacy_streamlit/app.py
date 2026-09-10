@@ -1,5 +1,5 @@
 """
-Dashboard v2 - Panel de space management para el dueño de la tienda.
+Dashboard v2 - Panel de Retailytics para el dueño de la tienda.
 
 Rediseño de estructura y visual sobre la v1 (ver docs/architecture.md
 para el historial de decisiones del proyecto). Cambios principales:
@@ -55,7 +55,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "pipeline"))
 from heatmap import build_density_map, render_heatmap as render_heatmap_overlay
 
 
-st.set_page_config(page_title="Space Management", layout="wide")
+st.set_page_config(page_title="Retailytics", layout="wide")
 
 
 # =============================================================================
@@ -99,7 +99,7 @@ def render_sidebar() -> str | None:
     """Panel de control persistente: elegir o crear una tienda, con su
     estado siempre visible. Devuelve el nombre de tienda elegido, o
     None si todavía no hay ninguna seleccionada."""
-    st.sidebar.markdown("## Space Management")
+    st.sidebar.markdown("## Retailytics")
     st.sidebar.caption("Flujo, permanencia e interacción -- sin identificar personas.")
     st.sidebar.divider()
 
@@ -951,7 +951,7 @@ def main():
 
     store_name = render_sidebar()
     if not store_name:
-        st.title("Space Management")
+        st.title("Retailytics")
         st.info("Elige o crea una tienda en la barra lateral para comenzar.")
         return
 

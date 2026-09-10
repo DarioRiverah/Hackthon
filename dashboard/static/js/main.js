@@ -178,7 +178,28 @@ document.addEventListener("DOMContentLoaded", () => {
     initSidebarGlare();
     initTabsNavPills();
     initLightbox();
+    initLogoutButton();
 });
+
+// #logout-btn vive en .brand-row (ver templates/layout.html), que --
+// igual que <aside class="sidebar"> -- nunca se reemplaza por
+// navigateTo(), así que se engancha UNA sola vez acá (mismo criterio
+// que initThemeToggle()/initSidebarGlare(), no en reinitAfterNavigation()).
+function initLogoutButton() {
+    const btn = document.getElementById("logout-btn");
+    if (!btn) return;
+    btn.addEventListener("click", async () => {
+        try {
+            await fetch("/logout", { method: "POST" });
+        } catch (err) {
+            // Falla de red al cerrar sesión: igual mandamos al login --
+            // si la cookie no se pudo borrar server-side, el antiguo
+            // token puede seguir sirviendo hasta que expire, pero no
+            // dejamos al usuario "atascado" en la página actual.
+        }
+        window.location.href = "/login";
+    });
+}
 
 // =============================================================================
 // Lightbox (visor de imagen ampliada) -- ver .lightbox-overlay/.lightbox-img
@@ -352,13 +373,13 @@ function initTabsNavPills() {
 // =============================================================================
 
 window.navigateTo = function navigateTo(url, pushState = true) {
-    // El overlay de pantalla completa (setup.js) ya bloquea el clic a
-    // la barra lateral mientras un job corre, pero el botón atrás del
-    // navegador no pasa por un clic -- corta cualquier sondeo activo
-    // ANTES de irnos, para no dejarlo corriendo "fantasma" sobre una
-    // página ya reemplazada (ver setup.js:pollJob()).
-    if (window.cancelActivePoll) window.cancelActivePoll();
-
+    // A propósito NO se cancela ningún sondeo de job en curso acá --
+    // ver static/js/job-bell.js: el sondeo de vista previa/procesamiento
+    // ahora vive a nivel global (campana de notificaciones), justamente
+    // para SOBREVIVIR a la navegación en vez de tener que cortarse cada
+    // vez que el usuario cambia de página (antes era necesario porque el
+    // overlay de pantalla completa y su callback onDone() vivían atados
+    // a la página del asistente de configuración).
     let finalUrl = url;
     return fetch(url, { headers: { "X-Requested-With": "fetch-nav" } })
         .then((resp) => {
@@ -413,17 +434,25 @@ window.navigateTo = function navigateTo(url, pushState = true) {
 // acá -- ambas viven sobre elementos que NUNCA se reemplazan (el
 // interruptor de tema y el propio <aside class="sidebar">), volver a
 // llamarlas duplicaría sus listeners.
+//
+// initJobBell() SÍ hace falta re-correrlo acá: la campana vive dentro
+// de .page-hero (ver job-bell.js), que a diferencia de la barra lateral
+// se reemplaza por completo en cada navegación -- sin este re-init el
+// botón quedaría sin sus listeners (campana "muerta") después de
+// navegar una sola vez.
 function reinitAfterNavigation() {
     window.refreshIcons();
     initKpiCountUp();
     initExpanders();
     initTabsNavPills();
+    if (window.initJobBell) window.initJobBell();
 
     if (window.initResultsPage) window.initResultsPage();
     if (window.initSetupPage) window.initSetupPage();
     if (window.initCalibrationPage) window.initCalibrationPage();
     if (window.initDataManagementPage) window.initDataManagementPage();
     if (window.initTiendaCombinadaPage) window.initTiendaCombinadaPage();
+    if (window.initSettingsPage) window.initSettingsPage();
 }
 
 // El selector de tienda navegaba con una recarga completa vía
@@ -438,10 +467,13 @@ window.handleTiendaSelectChange = function handleTiendaSelectChange(selectEl) {
 };
 
 // Solo intercepta <a href> reales dentro de la barra lateral (lista de
-// cámaras, Vista combinada, Agregar cámara, sub-nav de la página) o el
-// breadcrumb del encabezado ("demo / cámara") -- exactamente lo que
-// pide la tarea, no "cualquier link de la página" (ej. las tarjetas de
-// tienda en welcome.html, o el link a Tendencias desde Datos, siguen
+// cámaras, Vista combinada, Agregar cámara, sub-nav de la página), el
+// breadcrumb del encabezado ("demo / cámara"), o la barra de pestañas
+// horizontal de secciones (.section-tabs, ver results.html -- el único
+// enlace real ahí es "Datos", el resto son botones data-tab sin href
+// que ni siquiera llegan a este chequeo) -- exactamente lo que pide la
+// tarea, no "cualquier link de la página" (ej. las tarjetas de tienda
+// en welcome.html, o el link a Tendencias desde Datos, siguen
 // navegando normal a propósito: no eran parte del pedido y ampliar el
 // alcance sin que se pidiera es más riesgo que beneficio acá).
 // Respeta target="_blank", descargas, y clic con modificador (nueva
@@ -468,7 +500,7 @@ document.addEventListener("click", (event) => {
 
     const link = event.target.closest("a[href]");
     if (!link) return;
-    if (!link.closest(".sidebar") && !link.closest(".page-hero")) return;
+    if (!link.closest(".sidebar") && !link.closest(".page-hero") && !link.closest(".section-tabs")) return;
     if (!isInternalNavigableLink(link)) return;
 
     event.preventDefault();

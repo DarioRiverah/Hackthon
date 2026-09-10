@@ -4,19 +4,24 @@ Orquestador del pipeline completo.
 Encadena, en un solo comando, todos los pasos de procesamiento que hasta
 ahora se corrían por separado:
 
-    1.  detect_and_track.py        -> tracking de cuerpo (YOLO26)
-    2.  track_stitching.py         -> corrige fragmentación de tracks de cuerpo
-    3.  render_stitched_preview.py -> video de verificación CON IDs ya corregidos
-    4.  zoning.py                  -> dwell time y clasificación pasa/detiene
-    5.  heatmap.py (flujo)         -> mapa de calor de tráfico corporal
-    6.  spaghetti_diagram.py       -> diagrama de trayectorias reales
-    7.  detect_hand_positions.py   -> tracking de manos (YOLOv8-pose) [omitible]
-    8.  track_stitching.py         -> corrige fragmentación de tracks de mano
-    9.  render_stitched_preview.py -> video de verificación de manos corregido
-    10. interaction_events.py      -> eventos de interacción con el estante
-    11. heatmap.py (interaccion)   -> mapa de calor de interacción de mano
+    1. detect_and_track.py         -> UN SOLO modelo (YOLO26-pose) que en
+                                       una sola pasada entrega tanto el
+                                       tracking de cuerpo como la posición
+                                       de muñeca (antes eran dos llamadas
+                                       a dos modelos distintos)
+    2. track_stitching.py          -> corrige fragmentación de tracks de cuerpo
+    3. track_stitching.py          -> corrige fragmentación de tracks de mano [omitible]
+    4. render_stitched_preview.py  -> UN SOLO video de verificación con IDs
+                                       ya corregidos (caja de cuerpo + punto
+                                       de muñeca superpuestos)
+    5. zoning.py                   -> dwell time y clasificación pasa/detiene
+    6. heatmap.py (flujo)          -> mapa de calor de tráfico corporal
+    7. spaghetti_diagram.py        -> diagrama de trayectorias reales
+    8. interaction_events.py       -> eventos de interacción con el estante [omitible]
+    9. heatmap.py (interaccion)    -> mapa de calor de interacción de mano [omitible]
 
-Los pasos 7-11 se omiten con --skip-hands.
+Los pasos 3, 8 y 9 se omiten con --skip-hands (el paso 4 sigue corriendo,
+pero solo con la caja de cuerpo, sin el punto de mano).
 
 NOTA: el pipeline ya no genera un heatmap "combinado" (tráfico +
 interacción con contorno) -- se eliminó del flujo por simplificación:
@@ -26,17 +31,15 @@ comunican esa información de forma más clara que la versión combinada
 la función `render_combined_heatmap` y el modo `--mode combinado` por
 si se quiere generar manualmente, pero ya no se invoca desde aquí.
 
-IMPORTANTE sobre los videos de verificación: el video que genera
-detect_and_track.py/detect_hand_positions.py en el paso 1/7
-(tracked_preview_*.webm, hands_preview_*.webm) muestra los IDs CRUDOS,
-antes de la costura -- es NORMAL y ESPERADO que ahí una misma persona
-aparezca con IDs distintos en momentos distintos (ver
+IMPORTANTE sobre el video de verificación: el video que genera
+detect_and_track.py en el paso 1 (tracked_preview_*.webm) muestra los
+IDs CRUDOS, antes de la costura -- es NORMAL y ESPERADO que ahí una
+misma persona aparezca con IDs distintos en momentos distintos (ver
 docs/architecture.md, sección 3). Ese video es solo un diagnóstico
-interno del paso 1/7, NO la verificación final. El video que sí
+interno del paso 1, NO la verificación final. El video que sí
 representa el resultado real usado por el resto del pipeline es el que
-genera render_stitched_preview.py en los pasos 3/9
-(tracked_preview_corregido_*.webm, hands_preview_corregido_*.webm) --
-ese es el que debe mostrarse a cualquier usuario final.
+genera render_stitched_preview.py en el paso 4 (preview_corregido_*.webm)
+-- ese es el que debe mostrarse a cualquier usuario final.
 
 NOTA sobre el formato de estos videos de verificación: se generan en
 .webm (códec VP8), no .mp4 -- ver docs/architecture.md sección 19 para
@@ -90,7 +93,7 @@ def parse_args():
     parser.add_argument("--conf", type=float, default=0.2,
                          help="Umbral de confianza de detección (default: 0.2)")
     parser.add_argument("--skip-hands", action="store_true",
-                         help="Omite detección de manos/interacción (solo flujo + dwell time)")
+                         help="Omite costura/interacción de manos (solo flujo + dwell time)")
     parser.add_argument("--spaghetti-min-distance", type=float, default=30.0,
                          help="Umbral de simplificación del diagrama de espagueti, en píxeles "
                               "(default: 30.0 -- funcionó bien para escenas de interacción de cerca; "
@@ -105,6 +108,10 @@ def parse_args():
                          help="Fecha (YYYY-MM-DD) a asociar con esta corrida en el historial -- no "
                               "tiene que ser hoy, puede representar cuándo se grabó el video "
                               "(default: fecha de hoy si se omite)")
+    parser.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "gpu"],
+                         help="Dispositivo de procesamiento a forzar en el paso de detección "
+                              "(default: %(default)s). 'auto' deja que Ultralytics elija GPU si hay "
+                              "disponible o CPU si no, igual que siempre.")
 
     return parser.parse_args()
 
@@ -116,16 +123,16 @@ def run_step(step_num: int, total_steps: int, description: str, args_list: list,
     encadenando sobre datos rotos.
 
     `retry_env`: red de seguridad de OpenVINO (ver pipeline/export_openvino.py
-    y docs/architecture.md). Los pasos de detección (1 y 7) pasan
+    y docs/architecture.md). El paso de detección (1) pasa
     {"DISABLE_OPENVINO": "1"} acá -- si el intento normal falla con
     CUALQUIER código de salida distinto de cero, se reintenta UNA vez con
-    esa variable de entorno, que le indica a detect_and_track.py /
-    detect_hand_positions.py que usen el modelo .pt original en vez del
-    optimizado a OpenVINO. Esto es deliberadamente un reintento a nivel de
-    PROCESO (no un try/except adentro del script) porque un fallo real de
-    OpenVINO puede manifestarse como una caída nativa del proceso (segfault)
-    que ningún try/except de Python puede atrapar -- confirmado de la forma
-    difícil probando esto en desarrollo, ver docs/architecture.md."""
+    esa variable de entorno, que le indica a detect_and_track.py que use
+    el modelo .pt original en vez del optimizado a OpenVINO. Esto es
+    deliberadamente un reintento a nivel de PROCESO (no un try/except
+    adentro del script) porque un fallo real de OpenVINO puede
+    manifestarse como una caída nativa del proceso (segfault) que ningún
+    try/except de Python puede atrapar -- confirmado de la forma difícil
+    probando esto en desarrollo, ver docs/architecture.md."""
     print(f"\n{'=' * 70}")
     print(f"[{step_num}/{total_steps}] {description}")
     print(f"{'=' * 70}")
@@ -169,25 +176,32 @@ def main():
         print(f"ERROR: no se encontró el video '{args.video}'")
         sys.exit(1)
 
+    # El reintento automático sin OpenVINO (ver docstring de run_step) solo
+    # tiene sentido para 'auto'/'cpu' -- OpenVINO ya se omite por completo
+    # cuando se fuerza GPU (ver detect_and_track.py:load_model), así que
+    # reintentar con DISABLE_OPENVINO=1 ahí no cambiaría nada y solo
+    # duplicaría un fallo real de GPU (ej. no detectada) sin aportar nada.
+    detection_retry_env = None if args.device == "gpu" else {"DISABLE_OPENVINO": "1"}
+
     video_basename = os.path.splitext(os.path.basename(args.video))[0]
 
     body_tracks_csv = f"data/processed/tracks_{video_basename}.csv"
     body_tracks_stitched_csv = f"data/processed/tracks_{video_basename}_stitched.csv"
-    body_preview_corregido = f"data/processed/tracked_preview_corregido_{video_basename}.webm"
     hand_tracks_csv = f"data/processed/hands_{video_basename}.csv"
     hand_tracks_stitched_csv = f"data/processed/hands_{video_basename}_stitched.csv"
-    hand_preview_corregido = f"data/processed/hands_preview_corregido_{video_basename}.webm"
+    preview_corregido = f"data/processed/preview_corregido_{video_basename}.webm"
 
     total_start = time.time()
     timings = {}
-    total_steps = 6 if args.skip_hands else 11
+    total_steps = 6 if args.skip_hands else 9
     step = 0
 
     step += 1
-    timings["1_deteccion_cuerpo"] = run_step(
-        step, total_steps, "Detección y tracking de personas (YOLO26)",
-        ["pipeline/detect_and_track.py", "--video", args.video, "--conf", str(args.conf)],
-        retry_env={"DISABLE_OPENVINO": "1"},
+    timings["1_deteccion"] = run_step(
+        step, total_steps, "Detección y tracking (YOLO26-pose: cuerpo + mano en una sola pasada)",
+        ["pipeline/detect_and_track.py", "--video", args.video, "--conf", str(args.conf),
+         "--device", args.device],
+        retry_env=detection_retry_env,
     )
 
     step += 1
@@ -198,29 +212,40 @@ def main():
          "--max-speed-px-per-s", str(args.body_max_speed)],
     )
 
+    if not args.skip_hands:
+        step += 1
+        timings["3_costura_manos"] = run_step(
+            step, total_steps, "Costura de tracks de mano",
+            ["pipeline/track_stitching.py", "--input", hand_tracks_csv,
+             "--max-gap-seconds", str(args.hand_max_gap),
+             "--max-speed-px-per-s", str(args.hand_max_speed)],
+        )
+
     step += 1
-    timings["3_verificacion_cuerpo"] = run_step(
-        step, total_steps, "Video de verificación de cuerpo (IDs corregidos)",
-        ["pipeline/render_stitched_preview.py", "--video", args.video,
-         "--stitched-csv", body_tracks_stitched_csv, "--output", body_preview_corregido],
+    render_args = ["pipeline/render_stitched_preview.py", "--video", args.video,
+                   "--body-csv", body_tracks_stitched_csv, "--output", preview_corregido]
+    if not args.skip_hands:
+        render_args += ["--hand-csv", hand_tracks_stitched_csv]
+    timings["4_verificacion"] = run_step(
+        step, total_steps, "Video de verificación (IDs corregidos: cuerpo + mano)", render_args,
     )
 
     step += 1
-    timings["4_zonificacion"] = run_step(
+    timings["5_zonificacion"] = run_step(
         step, total_steps, "Zonificación y cálculo de dwell time",
         ["pipeline/zoning.py", "--tracks", body_tracks_stitched_csv,
          "--zones", zones_rel_path, "--output-prefix", args.store_name],
     )
 
     step += 1
-    timings["5_heatmap_flujo"] = run_step(
+    timings["6_heatmap_flujo"] = run_step(
         step, total_steps, "Heatmap de flujo (tráfico corporal)",
         ["pipeline/heatmap.py", "--video", args.video, "--tracks", body_tracks_csv,
          "--zones", zones_rel_path, "--mode", "flujo"],
     )
 
     step += 1
-    timings["6_diagrama_espagueti"] = run_step(
+    timings["7_diagrama_espagueti"] = run_step(
         step, total_steps, "Diagrama de espagueti (trayectorias)",
         ["pipeline/spaghetti_diagram.py", "--video", args.video, "--tracks", body_tracks_stitched_csv,
          "--zones", zones_rel_path, "--min-distance", str(args.spaghetti_min_distance)],
@@ -228,29 +253,7 @@ def main():
 
     if not args.skip_hands:
         step += 1
-        timings["7_deteccion_manos"] = run_step(
-            step, total_steps, "Detección de posición de manos (YOLOv8-pose)",
-            ["pipeline/detect_hand_positions.py", "--video", args.video, "--conf", str(args.conf)],
-            retry_env={"DISABLE_OPENVINO": "1"},
-        )
-
-        step += 1
-        timings["8_costura_manos"] = run_step(
-            step, total_steps, "Costura de tracks de mano",
-            ["pipeline/track_stitching.py", "--input", hand_tracks_csv,
-             "--max-gap-seconds", str(args.hand_max_gap),
-             "--max-speed-px-per-s", str(args.hand_max_speed)],
-        )
-
-        step += 1
-        timings["9_verificacion_manos"] = run_step(
-            step, total_steps, "Video de verificación de manos (IDs corregidos)",
-            ["pipeline/render_stitched_preview.py", "--video", args.video,
-             "--stitched-csv", hand_tracks_stitched_csv, "--output", hand_preview_corregido],
-        )
-
-        step += 1
-        timings["10_interaccion"] = run_step(
+        timings["8_interaccion"] = run_step(
             step, total_steps, "Detección de eventos de interacción",
             ["pipeline/interaction_events.py", "--hands", hand_tracks_stitched_csv,
              "--zones", zones_rel_path, "--output-prefix", args.store_name,
@@ -258,7 +261,7 @@ def main():
         )
 
         step += 1
-        timings["11_heatmap_interaccion"] = run_step(
+        timings["9_heatmap_interaccion"] = run_step(
             step, total_steps, "Heatmap de interacción (mano)",
             ["pipeline/heatmap.py", "--video", args.video, "--tracks", hand_tracks_stitched_csv,
              "--zones", zones_rel_path, "--mode", "interaccion"],

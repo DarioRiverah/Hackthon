@@ -28,10 +28,28 @@ _lock = threading.Lock()
 _STEP_PATTERN = re.compile(r"^\[(\d+)/(\d+)\]\s+(?!completado)(.+)$")
 
 
-def start_job(job_key: str, command: list, env: dict = None, retry_env: dict = None):
+def start_job(job_key: str, command: list, env: dict = None, retry_env: dict = None, exclusive: bool = False):
     """Lanza `command` en un hilo de fondo y devuelve de inmediato. Si ya
     hay un job con esa clave corriendo, no lanza uno nuevo (evita doble
     clic disparando el pipeline dos veces).
+
+    Devuelve (started: bool, blocked_by: str|None) -- `blocked_by` trae
+    la clave del job que impidió el arranque, para que el llamador pueda
+    armar un mensaje claro ("ya hay X corriendo") en vez de fallar en
+    silencio.
+
+    `exclusive=True`: además de la protección de arriba, rechaza el
+    arranque si CUALQUIER OTRO job_key está en estado 'running' en este
+    momento (sea de esta tienda o de otra). Lo usan los dos jobs pesados
+    (vista previa de calor, procesar) porque ambos corren el pipeline de
+    YOLO como subproceso -- este servidor de desarrollo es un solo
+    proceso con una sola GPU/CPU detrás, así que correr dos pipelines de
+    video a la vez compite por el mismo recurso en vez de acelerar nada.
+    Se eligió BLOQUEAR (con mensaje claro) en vez de encolar: encolar
+    exige un despachador de fondo + estado de cola persistente para un
+    beneficio marginal acá (un solo operador dispara estos jobs a mano,
+    uno a la vez, en la práctica) -- ver dashboard/static/js/job-bell.js
+    y docs/architecture.md.
 
     `retry_env`: red de seguridad de OpenVINO (ver pipeline/export_openvino.py,
     pipeline/run_pipeline.py:run_step y docs/architecture.md) -- se usa acá
@@ -46,7 +64,12 @@ def start_job(job_key: str, command: list, env: dict = None, retry_env: dict = N
     with _lock:
         existing = _jobs.get(job_key)
         if existing and existing["status"] == "running":
-            return False
+            return False, job_key
+
+        if exclusive:
+            other_running = next((k for k, j in _jobs.items() if j["status"] == "running"), None)
+            if other_running:
+                return False, other_running
 
         _jobs[job_key] = {
             "status": "running",
@@ -59,7 +82,7 @@ def start_job(job_key: str, command: list, env: dict = None, retry_env: dict = N
 
     thread = threading.Thread(target=_run_job, args=(job_key, command, env, retry_env), daemon=True)
     thread.start()
-    return True
+    return True, None
 
 
 def _run_job_once(job_key: str, command: list, full_env: dict) -> int:

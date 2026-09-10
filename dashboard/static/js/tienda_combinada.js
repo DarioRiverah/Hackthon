@@ -54,40 +54,98 @@ window.initTiendaCombinadaPage = function initTiendaCombinadaPage() {
                 return;
             }
 
-            const r = data.result;
-            const positive = r.cambio_pct > 0;
-            const messageKind = positive ? "success" : "info";
-            const message = positive
-                ? `Si el producto de '${data.from_label}' generara el mismo interés por visitante en ` +
-                  `'${data.to_label}' (que tiene más tráfico: ${data.visits_to.toFixed(0)} vs ${data.visits_from.toFixed(0)} ` +
-                  `visitas), podría pasar de ${r.interacciones_actuales.toFixed(0)} a ${r.interacciones_simuladas.toFixed(1)} ` +
-                  `interacciones -- un aumento estimado de ${r.cambio_pct.toFixed(0)}%.`
-                : `'${data.to_label}' tiene menos tráfico que '${data.from_label}' ` +
-                  `(${data.visits_to.toFixed(0)} vs ${data.visits_from.toFixed(0)} visitas), así que este movimiento ` +
-                  `probablemente reduciría la interacción total, no la aumentaría.`;
-
-            let html = `
-                <div class="panel">
-                    <h4>Resultado de la simulación</h4>
-                    <div class="metric-row">
-                        <div class="metric"><div class="metric-label">Interacciones actuales</div><div class="metric-value">${r.interacciones_actuales.toFixed(0)}</div></div>
-                        <div class="metric"><div class="metric-label">Interacciones estimadas en '${escapeHtmlTienda(data.to_label)}'</div><div class="metric-value">${r.interacciones_simuladas.toFixed(1)}</div></div>
-                        <div class="metric"><div class="metric-label">Cambio estimado</div><div class="metric-value">${r.cambio_pct >= 0 ? "+" : ""}${r.cambio_pct.toFixed(0)}%</div></div>
-                    </div>
-                    <div style="margin-top:var(--space-4);">${window.alertHtml(messageKind, message)}</div>
-                    <p class="caption">Recuerda: esta es una extrapolación basada en el patrón de tráfico observado, asumiendo que el interés del producto por visitante no cambia entre zonas.</p>
-                </div>`;
-
-            if (!data.same_camara) html += comparabilidadHtml(data);
-
-            resultDiv.innerHTML = html;
+            resultDiv.innerHTML = buildTiendaSimResultHtml(data);
             window.refreshIcons();
         } catch (err) {
             resultDiv.innerHTML = window.alertHtml("error", "No se pudo calcular la simulación. Intenta de nuevo.");
             window.refreshIcons();
         }
     });
+
+    const recommendBtn = document.getElementById("tienda-sim-recommend-btn");
+    if (!recommendBtn) return;
+
+    recommendBtn.addEventListener("click", async () => {
+        const tienda = recommendBtn.dataset.tienda;
+        const fromKey = document.getElementById("tienda-sim-from").value;
+        const toSelect = document.getElementById("tienda-sim-to");
+        const resultDiv = document.getElementById("tienda-sim-result");
+
+        resultDiv.innerHTML = '<p class="caption">Comparando contra todas las zonas candidatas de todas las cámaras...</p>';
+        try {
+            const resp = await fetch(`/api/tienda/${encodeURIComponent(tienda)}/simulate/recommend`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ from_id: fromKey }),
+            });
+            const data = await resp.json();
+
+            if (!data.ok) {
+                // no_improvement: zona ya bien ubicada, no es un error real.
+                let html = window.alertHtml(data.no_improvement ? "info" : "warning", escapeHtmlTienda(data.error));
+                if (data.same_camara === false) html += comparabilidadHtml(data);
+                resultDiv.innerHTML = html;
+                window.refreshIcons();
+                return;
+            }
+
+            // Auto-completa el selector manual con el destino recomendado
+            // (puede quedar en otra cámara) -- el control manual sigue
+            // disponible para elegir otra combinación después.
+            if (data.to_key != null && toSelect) toSelect.value = data.to_key;
+
+            let html = buildTiendaSimResultHtml(data, { nEvaluados: data.n_candidatos_evaluados });
+            if (!data.same_camara) html += comparabilidadHtml(data);
+
+            resultDiv.innerHTML = html;
+            window.refreshIcons();
+        } catch (err) {
+            resultDiv.innerHTML = window.alertHtml("error", "No se pudo calcular la recomendación. Intenta de nuevo.");
+            window.refreshIcons();
+        }
+    });
 };
+
+// Arma el panel de resultado -- compartido entre "Simular" (destino
+// elegido a mano) y "Recomendarme el mejor destino". recommendMeta
+// (opcional): { nEvaluados } -- cuando viene, antepone un aviso
+// explícito de qué zona (y cámara) se recomendó y contra cuántas
+// candidatas se comparó, nunca solo el resultado numérico.
+function buildTiendaSimResultHtml(data, recommendMeta) {
+    const r = data.result;
+    const positive = r.cambio_pct > 0;
+    const messageKind = positive ? "success" : "info";
+    const message = positive
+        ? `Si el producto de '${data.from_label}' generara el mismo interés por visitante en ` +
+          `'${data.to_label}' (que tiene más tráfico: ${data.visits_to.toFixed(0)} vs ${data.visits_from.toFixed(0)} ` +
+          `visitas), podría pasar de ${r.interacciones_actuales.toFixed(0)} a ${r.interacciones_simuladas.toFixed(1)} ` +
+          `interacciones -- un aumento estimado de ${r.cambio_pct.toFixed(0)}%.`
+        : `'${data.to_label}' tiene menos tráfico que '${data.from_label}' ` +
+          `(${data.visits_to.toFixed(0)} vs ${data.visits_from.toFixed(0)} visitas), así que este movimiento ` +
+          `probablemente reduciría la interacción total, no la aumentaría.`;
+
+    const recommendBanner = recommendMeta
+        ? `<div style="margin-bottom:var(--space-4);">${window.alertHtml(
+              "success",
+              `Recomendación: comparamos '${escapeHtmlTienda(data.from_label)}' contra ${recommendMeta.nEvaluados} ` +
+              `zona(s) candidata(s) de todas las cámaras de la tienda -- el mejor destino encontrado es ` +
+              `<strong>'${escapeHtmlTienda(data.to_label)}'</strong> (cámara ${escapeHtmlTienda(data.to_camara)}).`
+          )}</div>`
+        : "";
+
+    return `
+        <div class="panel">
+            <h4>Resultado de la simulación</h4>
+            ${recommendBanner}
+            <div class="metric-row">
+                <div class="metric"><div class="metric-label">Interacciones actuales</div><div class="metric-value">${r.interacciones_actuales.toFixed(0)}</div></div>
+                <div class="metric"><div class="metric-label">Interacciones estimadas en '${escapeHtmlTienda(data.to_label)}'</div><div class="metric-value">${r.interacciones_simuladas.toFixed(1)}</div></div>
+                <div class="metric"><div class="metric-label">Cambio estimado</div><div class="metric-value">${r.cambio_pct >= 0 ? "+" : ""}${r.cambio_pct.toFixed(0)}%</div></div>
+            </div>
+            <div style="margin-top:var(--space-4);">${window.alertHtml(messageKind, message)}</div>
+            <p class="caption">Recuerda: esta es una extrapolación basada en el patrón de tráfico observado, asumiendo que el interés del producto por visitante no cambia entre zonas.</p>
+        </div>`;
+}
 
 // "Eliminar tienda completa" -- mismo patrón de diálogo real
 // (<dialog>) + confirmación por nombre escrito ya usado para "Eliminar

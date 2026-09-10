@@ -1,5 +1,5 @@
 """
-Convierte los modelos YOLO activos del pipeline (ver docs/architecture.md
+Convierte el modelo YOLO activo del pipeline (ver docs/architecture.md
 sección 16) a formato OpenVINO (IR: .xml + .bin) para acelerar la
 inferencia en CPU -- especialmente en CPUs Intel, pero OpenVINO también
 acelera sobre otras arquitecturas x86 vía su backend de CPU genérico.
@@ -12,12 +12,12 @@ PURAMENTE una optimización de velocidad -- nunca una dependencia dura del
 pipeline. Si falla por CUALQUIER motivo (paquete `openvino` ausente o
 incompatible, arquitectura de CPU no soportada, timeout, lo que sea), este
 script SIEMPRE termina con código de salida 0 y simplemente no deja el
-directorio "<modelo>_openvino_model/" -- pipeline/detect_and_track.py y
-pipeline/detect_hand_positions.py (ver load_model() en detect_and_track.py)
-verifican si ese directorio existe antes de intentar usarlo, y si no
-existe (porque nunca se creó, o porque se creó pero falla al cargar) usan
-el .pt original sin ningún cambio de comportamiento. El pipeline NUNCA
-debe fallar por culpa de esta optimización.
+directorio "<modelo>_openvino_model/" -- pipeline/detect_and_track.py
+(ver load_model() ahí) verifica si ese directorio existe antes de
+intentar usarlo, y si no existe (porque nunca se creó, o porque se creó
+pero falla al cargar) usa el .pt original sin ningún cambio de
+comportamiento. El pipeline NUNCA debe fallar por culpa de esta
+optimización.
 
 Variable de entorno OPENVINO_EXPORT_FORMAT (default "openvino"): existe
 para poder FORZAR un fallo de conversión a propósito en pruebas (pasando
@@ -32,7 +32,7 @@ import sys
 
 from ultralytics import YOLO
 
-MODELS = ["yolo26n.pt", "yolov8n-pose.pt"]
+MODELS = ["yolo26n-pose.pt"]
 EXPORT_FORMAT = os.environ.get("OPENVINO_EXPORT_FORMAT", "openvino")
 
 

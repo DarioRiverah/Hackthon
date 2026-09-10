@@ -1,9 +1,9 @@
 {% extends partial_base %}
 {% from "_macros.html" import alert %}
-{% block title %}Configurar {{ current_store }} -- Space Management{% endblock %}
+{% block title %}Configurar {{ current_store }} -- Retailytics{% endblock %}
 {% block content %}
 
-<p class="caption">Configurando <strong>{{ current_store }}</strong>: sube tu grabación, marca el rango de interés, y deja que el sistema procese el resto.</p>
+<p class="caption" id="setup-page-root">Configurando <strong>{{ current_store }}</strong>: sube tu grabación, marca el rango de interés, y deja que el sistema procese el resto.</p>
 
 {% with messages = get_flashed_messages() %}
   {% if messages %}{% for m in messages %}{% call alert('warning') %}{{ m }}{% endcall %}{% endfor %}{% endif %}
@@ -93,6 +93,21 @@
         <summary><i data-lucide="sliders-horizontal" class="icon"></i> Ajustes técnicos avanzados (no hace falta tocar esto en la mayoría de los casos) <i data-lucide="chevron-down" class="icon chevron"></i></summary>
         <div class="expander-body">
             <p class="caption">Estos valores afinan el algoritmo interno que sigue a cada persona en el video. Los valores por defecto ya funcionan bien para la mayoría de los videos.</p>
+            <div class="form-field">
+                <label for="device-select">Dispositivo de procesamiento</label>
+                <select id="device-select">
+                    <option value="auto" selected>Automático (recomendado)</option>
+                    <option value="cpu">Forzar CPU</option>
+                    {% if gpu_info.available %}
+                    <option value="gpu">Forzar GPU ({{ gpu_info.name }} detectada)</option>
+                    {% else %}
+                    <option value="gpu" disabled>Forzar GPU (no disponible)</option>
+                    {% endif %}
+                </select>
+                {% if not gpu_info.available %}
+                <p class="caption">No se detectó una GPU compatible en este equipo.</p>
+                {% endif %}
+            </div>
             <div class="panel-row">
                 <div class="form-field"><label>Cuerpo: segundos máximos de "desaparición" tolerados</label><input type="number" id="body-max-gap" value="2.0" step="0.1"></div>
                 <div class="form-field"><label>Cuerpo: velocidad máxima plausible (px/s)</label><input type="number" id="body-max-speed" value="500.0" step="10"></div>
@@ -108,32 +123,5 @@
     <div id="process-progress"></div>
 </div>
 {% endif %}
-
-<!-- Overlay de pantalla completa compartido por las 3 acciones con
-     progreso (vista previa de calor, procesar, recortar) -- ver
-     static/js/setup.js: showLoadingOverlay()/updateLoadingOverlay()/
-     hideLoadingOverlay(). -->
-<div class="loading-overlay" id="loading-overlay" hidden>
-    <div class="wheel-and-hamster" aria-label="Cargando" role="img">
-        <div class="wheel"></div>
-        <div class="hamster">
-            <div class="hamster__body">
-                <div class="hamster__head">
-                    <div class="hamster__ear"></div>
-                    <div class="hamster__eye"></div>
-                    <div class="hamster__nose"></div>
-                </div>
-                <div class="hamster__limb hamster__limb--fr"></div>
-                <div class="hamster__limb hamster__limb--fl"></div>
-                <div class="hamster__limb hamster__limb--br"></div>
-                <div class="hamster__limb hamster__limb--bl"></div>
-                <div class="hamster__tail"></div>
-            </div>
-        </div>
-        <div class="spoke"></div>
-    </div>
-    <div class="loading-overlay__title" id="loading-overlay-title">En curso</div>
-    <div class="loading-overlay__desc" id="loading-overlay-desc">Procesando...</div>
-</div>
 
 {% endblock %}

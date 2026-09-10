@@ -1,9 +1,9 @@
-# Retail Vision MVP — Space Management por Visión Computacional
+# Retail Vision MVP — Retailytics por Visión Computacional
 
 Prototipo de visión computacional que analiza video de una tienda para
 detectar y cuantificar la dinámica de los clientes alrededor de las
 góndolas (flujo, permanencia, interacción física con productos) y
-generar recomendaciones accionables de space management — todo
+generar recomendaciones accionables de Retailytics — todo
 respetando privacidad por diseño (sin identificar personas, sin
 inferir emociones, sin almacenar biometría).
 

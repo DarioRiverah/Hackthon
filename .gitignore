@@ -9,3 +9,7 @@ venv/
 *.mp4
 *.avi
 runs/
+
+# Credenciales locales (cuenta de usuario, patrón de manos encriptado,
+# clave de firma de sesión) -- ver dashboard/auth_crypto.py.
+.secrets/

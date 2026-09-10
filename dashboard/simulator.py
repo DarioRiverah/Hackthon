@@ -80,14 +80,52 @@ def run_simulation(zone_summary_df: pd.DataFrame, interaction_summary_df: pd.Dat
             "error": f"'{from_label}' no tiene interacciones registradas todavía, "
                      "así que no hay una tasa base para extrapolar.",
             "from_label": from_label, "to_label": to_label,
+            "from_id": from_id, "to_id": to_id,
         }
 
     return {
         "ok": True, "error": None,
         "from_label": from_label, "to_label": to_label,
+        "from_id": from_id, "to_id": to_id,
         "visits_from": visits_from, "visits_to": visits_to,
         "result": result,
     }
+
+
+def recommend_best_destination(zone_summary_df: pd.DataFrame, interaction_summary_df: pd.DataFrame,
+                                from_id: str) -> dict:
+    """Prueba la zona de origen contra CADA otra zona disponible como
+    posible destino -- reutilizando run_simulation() sin cambios -- y
+    devuelve la que da el mayor cambio_pct. No sugiere un destino que
+    empeore las cosas: si ninguna candidata mejora la interacción
+    actual, lo reporta explícitamente (ok=False, no_improvement=True)
+    en vez de forzar la "menos mala" como si fuera una recomendación."""
+    candidate_ids = [zid for zid in zone_summary_df["zone_id"].tolist() if zid != from_id]
+    if not candidate_ids:
+        return {"ok": False, "error": "No hay otra zona disponible para comparar como destino."}
+
+    resultados = [run_simulation(zone_summary_df, interaction_summary_df, from_id, cid) for cid in candidate_ids]
+
+    # Si el origen no tiene interacciones registradas, TODAS las corridas
+    # fallan por la misma razón (independiente del destino) -- alcanza
+    # con propagar el primer error, ya viene con el mensaje explicando por qué.
+    exitosas = [r for r in resultados if r.get("ok")]
+    if not exitosas:
+        return resultados[0]
+
+    mejor = max(exitosas, key=lambda r: r["result"]["cambio_pct"])
+    if mejor["result"]["cambio_pct"] <= 0:
+        return {
+            "ok": False,
+            "no_improvement": True,
+            "from_label": mejor["from_label"],
+            "error": f"Esta zona ya parece estar bien ubicada -- comparamos contra {len(exitosas)} zona(s) "
+                     "candidata(s) y no encontramos un destino que mejore su interacción actual.",
+        }
+
+    mejor["n_candidatos_evaluados"] = len(exitosas)
+    mejor["recomendado"] = True
+    return mejor
 
 
 # =============================================================================
@@ -163,6 +201,7 @@ def run_simulation_multi(zone_summary_combinado: pd.DataFrame, interaction_summa
 
     base = {
         "from_label": from_label, "to_label": to_label,
+        "from_key": from_key, "to_key": to_key,
         "from_camara": from_camara, "to_camara": to_camara,
         "same_camara": from_camara == to_camara,
         "from_fecha_referencia": from_row["fecha_referencia"].iloc[0],
@@ -180,3 +219,47 @@ def run_simulation_multi(zone_summary_combinado: pd.DataFrame, interaction_summa
         }
 
     return {"ok": True, "error": None, "visits_from": visits_from, "visits_to": visits_to, "result": result, **base}
+
+
+def recommend_best_destination_multi(zone_summary_combinado: pd.DataFrame, interaction_summary_combinado: pd.DataFrame,
+                                       from_key: str) -> dict:
+    """Análogo a recommend_best_destination(), pero para la vista
+    combinada de tienda -- las candidatas recorren TODAS las zonas de
+    TODAS las cámaras de la tienda (vía run_simulation_multi(), sin
+    reimplementarla), así que el destino recomendado puede terminar en
+    una cámara distinta a la de origen. El resultado ya trae
+    same_camara/fecha-duración de referencia (heredado de
+    run_simulation_multi) para que la interfaz pueda mostrar la
+    advertencia de comparabilidad si corresponde."""
+    candidate_keys = [
+        _clave_compuesta(row["camara_origen"], row["zone_id"])
+        for _, row in zone_summary_combinado.iterrows()
+    ]
+    candidate_keys = [k for k in candidate_keys if k != from_key]
+    if not candidate_keys:
+        return {"ok": False, "error": "No hay otra zona disponible para comparar como destino."}
+
+    resultados = [
+        run_simulation_multi(zone_summary_combinado, interaction_summary_combinado, from_key, k)
+        for k in candidate_keys
+    ]
+
+    exitosas = [r for r in resultados if r.get("ok")]
+    if not exitosas:
+        return resultados[0]
+
+    mejor = max(exitosas, key=lambda r: r["result"]["cambio_pct"])
+    if mejor["result"]["cambio_pct"] <= 0:
+        return {
+            "ok": False,
+            "no_improvement": True,
+            "from_label": mejor["from_label"],
+            "from_camara": mejor["from_camara"],
+            "error": f"Esta zona ya parece estar bien ubicada -- comparamos contra {len(exitosas)} zona(s) "
+                     "candidata(s) (en esta y otras cámaras de la tienda) y no encontramos un destino que "
+                     "mejore su interacción actual.",
+        }
+
+    mejor["n_candidatos_evaluados"] = len(exitosas)
+    mejor["recomendado"] = True
+    return mejor

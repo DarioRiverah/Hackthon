@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>
+(function () {
+    try {
+        var saved = localStorage.getItem("theme");
+        var theme = saved === "light" || saved === "dark"
+            ? saved
+            : (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        document.documentElement.setAttribute("data-theme", theme);
+    } catch (e) { /* localStorage bloqueado -- se queda sin data-theme y CSS cae al @media de respaldo. */ }
+})();
+</script>
+<meta name="color-scheme" content="light dark">
+<title>Iniciar sesión -- Retailytics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+<script src="https://cdn.jsdelivr.net/npm/lucide@0.462.0/dist/umd/lucide.min.js" defer></script>
+<style>
+    .auth-shell { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: var(--space-6) var(--space-4); }
+    .auth-card { width: 100%; max-width: 420px; }
+    .auth-brand { text-align: center; margin-bottom: var(--space-5); }
+    .auth-brand .brand { font-family: var(--font-heading); font-weight: 800; font-size: var(--text-2xl); color: var(--color-ink); }
+    .auth-brand .tagline { color: var(--color-ink-muted); font-size: var(--text-sm); }
+    .auth-divider { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-5) 0; color: var(--color-ink-muted); font-size: var(--text-xs); }
+    .auth-divider::before, .auth-divider::after { content: ""; flex: 1; height: 1px; background: var(--color-line); }
+    #pattern-video-wrap { position: relative; width: 100%; max-width: 320px; margin: 0 auto var(--space-4); border-radius: var(--radius-panel); overflow: hidden; background: #000; }
+    #pattern-video { width: 100%; display: block; transform: scaleX(-1); opacity: 0; position: absolute; }
+    #pattern-canvas { width: 100%; display: block; transform: scaleX(-1); }
+    .pattern-progress { display: flex; gap: var(--space-2); justify-content: center; margin: var(--space-3) 0; }
+    .pattern-progress .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--color-line); transition: background-color 0.2s var(--ease-standard); }
+    .pattern-progress .dot.done { background: var(--color-success); }
+</style>
+</head>
+<body>
+<div class="auth-shell">
+    <div class="auth-card">
+        <div class="auth-brand">
+            <div class="brand">Retailytics</div>
+            <div class="tagline">Flujo, permanencia e interacción</div>
+        </div>
+
+        <div class="panel">
+            {% if first_run %}
+            <h4><i data-lucide="user-plus" class="icon"></i> Crear cuenta</h4>
+            <p class="caption">Primer arranque: no hay ninguna cuenta todavía en esta instalación. Creá el
+            usuario y contraseña que vas a usar para entrar.</p>
+            <div id="auth-alert"></div>
+            <form id="register-form">
+                <div class="form-field">
+                    <label for="register-username">Usuario</label>
+                    <input type="text" id="register-username" autocomplete="username" required>
+                </div>
+                <div class="form-field">
+                    <label for="register-password">Contraseña (mínimo 8 caracteres)</label>
+                    <input type="password" id="register-password" autocomplete="new-password" minlength="8" required>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">
+                    <i data-lucide="check" class="icon"></i> Crear cuenta y entrar
+                </button>
+            </form>
+
+            {% else %}
+            <div id="auth-alert"></div>
+
+            <div id="password-login-view">
+                <h4><i data-lucide="lock" class="icon"></i> Iniciar sesión</h4>
+                <form id="login-form">
+                    <div class="form-field">
+                        <label for="login-username">Usuario</label>
+                        <input type="text" id="login-username" autocomplete="username" required>
+                    </div>
+                    <div class="form-field">
+                        <label for="login-password">Contraseña</label>
+                        <input type="password" id="login-password" autocomplete="current-password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">
+                        <i data-lucide="log-in" class="icon"></i> Entrar
+                    </button>
+                </form>
+
+                {% if has_pattern %}
+                <div class="auth-divider">o</div>
+                <button type="button" class="btn" id="show-pattern-login-btn" style="width:100%; justify-content:center;">
+                    <i data-lucide="hand" class="icon"></i> Iniciar sesión con patrón de manos
+                </button>
+                {% endif %}
+            </div>
+
+            {% if has_pattern %}
+            <div id="pattern-login-view" hidden>
+                <h4><i data-lucide="hand" class="icon"></i> Login con patrón de manos</h4>
+                <p class="caption" id="pattern-status">Preparando la cámara...</p>
+                <div id="pattern-video-wrap">
+                    <video id="pattern-video" muted playsinline></video>
+                    <canvas id="pattern-canvas"></canvas>
+                </div>
+                <div class="pattern-progress" id="pattern-progress">
+                    <span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                </div>
+                <button type="button" class="btn" id="pattern-capture-btn" style="width:100%; justify-content:center; margin-bottom:var(--space-3);">
+                    <i data-lucide="camera" class="icon"></i> Capturar esta pose
+                </button>
+                <button type="button" class="btn" id="use-password-btn" style="width:100%; justify-content:center;">
+                    <i data-lucide="key-round" class="icon"></i> Usar mi contraseña en su lugar
+                </button>
+            </div>
+            {% endif %}
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>window.addEventListener("DOMContentLoaded", () => { if (window.lucide) lucide.createIcons(); });</script>
+<script type="module" src="{{ url_for('static', filename='js/hand_pattern.js') }}"></script>
+<script src="{{ url_for('static', filename='js/login.js') }}"></script>
+</body>
+</html>

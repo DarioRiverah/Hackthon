@@ -173,8 +173,7 @@ def results():
         "Trayectorias (espagueti)": f"data/output/spaghetti_{video_basename}.png",
     }
     video_paths = {
-        "Cuerpo": f"data/processed/tracked_preview_corregido_{video_basename}.webm",
-        "Manos": f"data/processed/hands_preview_corregido_{video_basename}.webm",
+        "Cuerpo + manos": f"data/processed/preview_corregido_{video_basename}.webm",
     }
     zone_events_df, interaction_events_df = storytelling.load_events(store_name)
 

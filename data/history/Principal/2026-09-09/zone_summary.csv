@@ -1,0 +1,4 @@
+zone_id,zone_label,total_visits,stops,pass_throughs,stop_rate_pct,avg_dwell_seconds,max_dwell_seconds
+Frutas(derecha),Frutas(derecha),11,0,11,0.0,0.57,1.96
+Verduras,Verduras,11,5,6,45.5,2.23,7.24
+Frutas(izquierda),Frutas(izquierda),4,0,4,0.0,1.22,1.96

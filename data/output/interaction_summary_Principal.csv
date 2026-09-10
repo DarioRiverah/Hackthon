@@ -1,0 +1,4 @@
+zone_id,zone_label,total_interactions,toques_breves,interacciones_medias,interacciones_prolongadas,avg_duration_seconds
+Frutas(derecha),Frutas(derecha),17,4,6,7,3.8
+Frutas(izquierda),Frutas(izquierda),9,2,5,2,2.12
+Verduras,Verduras,5,4,1,0,0.41

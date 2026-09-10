@@ -2,44 +2,19 @@ document.addEventListener("DOMContentLoaded", () => {
     window.initSetupPage();
 });
 
-// #loading-overlay es el ancla de "esta es la página del asistente de
+// #setup-page-root es el ancla de "esta es la página del asistente de
 // configuración" para static/js/main.js:navigateTo() -- se renderiza
 // siempre, sin importar en qué paso está el asistente (subir/recortar/
 // calibrar/procesar), a diferencia de cualquier botón de un paso
 // específico que solo existe condicionalmente.
 window.initSetupPage = function initSetupPage() {
-    if (!document.getElementById("loading-overlay")) return;
+    if (!document.getElementById("setup-page-root")) return;
     initVideoDropzone();
     initTrim();
     initGeneratePreview();
     initRecordHistoryToggle();
     initProcess();
 };
-
-// Overlay de pantalla completa compartido por las 3 acciones con
-// progreso de este asistente (vista previa de calor, procesar,
-// recortar) -- antes cada una tenía su propio indicador inconsistente
-// (una tarjeta con el hámster, otra con pasos numerados, otra solo
-// texto plano sin animación). Una sola fuente de verdad para mostrar/
-// actualizar/esconder evita que se repita esa inconsistencia si se
-// agrega una cuarta acción más adelante.
-function showLoadingOverlay(title, desc) {
-    const overlay = document.getElementById("loading-overlay");
-    if (!overlay) return;
-    document.getElementById("loading-overlay-title").textContent = title;
-    document.getElementById("loading-overlay-desc").textContent = desc;
-    overlay.hidden = false;
-}
-function updateLoadingOverlay(title, desc) {
-    const overlay = document.getElementById("loading-overlay");
-    if (!overlay || overlay.hidden) return;
-    if (title != null) document.getElementById("loading-overlay-title").textContent = title;
-    if (desc != null) document.getElementById("loading-overlay-desc").textContent = desc;
-}
-function hideLoadingOverlay() {
-    const overlay = document.getElementById("loading-overlay");
-    if (overlay) overlay.hidden = true;
-}
 
 // Dropzone del paso "1. Sube tu video" (.custom-file-upload en setup.html):
 // el <input type="file"> real sigue siendo el elemento funcional (oculto
@@ -123,24 +98,38 @@ function initTrim() {
 
     applyBtn.addEventListener("click", async () => {
         const statusDiv = document.getElementById("trim-status");
-        statusDiv.textContent = "";
-        showLoadingOverlay("En curso", "Recortando video...");
-        const resp = await fetch(`/api/store/${encodeURIComponent(currentStoreName())}/trim`, {
+        const store = currentStoreName();
+        applyBtn.disabled = true;
+        statusDiv.innerHTML = '<p class="caption">Recortando video...</p>';
+        // Recortar es una sola petición síncrona (no pasa por job_manager,
+        // ver dashboard/api_routes.py:trim), pero igual se anuncia en la
+        // campana -- si el usuario ya se fue de esta página mientras
+        // recortaba, sigue viendo el resultado ahí en vez de perderlo.
+        const notifId = window.addBellNotification(`Recortando video: ${store}`);
+        const resp = await fetch(`/api/store/${encodeURIComponent(store)}/trim`, {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ input_path: video, start_sec: startSlider.value, end_sec: endSlider.value }),
         });
         const data = await resp.json();
         if (!data.ok) {
-            hideLoadingOverlay();
+            window.finishBellNotification(notifId, "error");
+            applyBtn.disabled = false;
             statusDiv.innerHTML = `<span style="color:var(--color-error)">${data.error}</span>`;
             return;
         }
-        updateLoadingOverlay(null, `Video recortado guardado (${data.n_frames} frames). Aplicando...`);
+        window.finishBellNotification(notifId, "done");
 
+        // Si el usuario navegó a otra página mientras se recortaba (ya
+        // posible ahora que esto no bloquea con un overlay), este botón
+        // ya no está en el DOM -- no tiene sentido enviar el form que
+        // avanza AL SIGUIENTE PASO de un asistente que ya no se ve.
+        if (!document.body.contains(applyBtn)) return;
+
+        statusDiv.innerHTML = `<p class="caption">Video recortado guardado (${data.n_frames} frames). Aplicando...</p>`;
         const form = document.createElement("form");
         form.method = "post";
         form.action = "/setup/use-trimmed";
-        form.innerHTML = `<input type="hidden" name="store" value="${currentStoreName()}">
+        form.innerHTML = `<input type="hidden" name="store" value="${store}">
                            <input type="hidden" name="trimmed_path" value="${data.output_path}">`;
         document.body.appendChild(form);
         form.submit();
@@ -165,12 +154,29 @@ function initGeneratePreview() {
         btn.disabled = true;
         const progressDiv = document.getElementById("preview-progress");
         progressDiv.innerHTML = "";
-        showLoadingOverlay("En curso", "Preparando...");
-        await fetch(`/api/store/${encodeURIComponent(btn.dataset.store)}/generate-preview`, {
+        const resp = await fetch(`/api/store/${encodeURIComponent(btn.dataset.store)}/generate-preview`, {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ video_path: btn.dataset.video }),
         });
-        pollJob(btn.dataset.store, "preview", progressDiv, () => window.location.reload());
+        const data = await resp.json();
+        if (!data.ok) {
+            btn.disabled = false;
+            progressDiv.innerHTML = window.alertHtml("error", escapeHtmlSetup(data.error));
+            window.refreshIcons();
+            return;
+        }
+        progressDiv.innerHTML = window.alertHtml(
+            "info",
+            "Generando la vista previa en segundo plano -- revisa la campana de notificaciones (arriba) para ver el progreso. Podés seguir navegando mientras tanto."
+        );
+        window.refreshIcons();
+        window.startJobPolling(btn.dataset.store, "preview", `Vista previa de calor: ${btn.dataset.store}`, {
+            // Si el usuario se quedó en esta página, refresca para mostrar
+            // la vista previa recién generada -- si ya se fue, no tiene
+            // sentido recargar una página que ya no está viendo.
+            onDone: () => { if (document.getElementById("generate-preview-btn")) window.location.reload(); },
+            onError: () => { btn.disabled = false; },
+        });
     });
 }
 
@@ -204,7 +210,6 @@ function initProcess() {
         btn.disabled = true;
         const progressDiv = document.getElementById("process-progress");
         progressDiv.innerHTML = "";
-        showLoadingOverlay("En curso", "Iniciando procesamiento...");
         const payload = {
             video_path: document.getElementById("calibration-root")?.dataset.video || "",
             skip_hands: document.getElementById("skip-hands-check").checked,
@@ -214,74 +219,41 @@ function initProcess() {
             body_max_speed: parseFloat(document.getElementById("body-max-speed").value),
             hand_max_gap: parseFloat(document.getElementById("hand-max-gap").value),
             hand_max_speed: parseFloat(document.getElementById("hand-max-speed").value),
+            device: document.getElementById("device-select")?.value || "auto",
         };
         const resp = await fetch(`/api/store/${encodeURIComponent(btn.dataset.store)}/process`, {
             method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
         });
         const data = await resp.json();
         if (!data.ok) {
-            hideLoadingOverlay();
             progressDiv.innerHTML = window.alertHtml("error", escapeHtmlSetup(data.error));
             window.refreshIcons();
             btn.disabled = false;
             return;
         }
-        pollJob(btn.dataset.store, "process", progressDiv, () => {
-            window.location.href = `/store/results?store=${encodeURIComponent(btn.dataset.store)}`;
-        }, () => { btn.disabled = false; });
+        progressDiv.innerHTML = window.alertHtml(
+            "info",
+            "Procesando en segundo plano -- revisa la campana de notificaciones (arriba) para ver el progreso. Podés seguir navegando mientras tanto."
+        );
+        window.refreshIcons();
+        const resultsUrl = `/store/results?store=${encodeURIComponent(btn.dataset.store)}`;
+        window.startJobPolling(btn.dataset.store, "process", `Procesando video: ${btn.dataset.store}`, {
+            resultUrl: resultsUrl,
+            // Si el usuario se quedó en el asistente, lo lleva a resultados
+            // igual que antes -- si ya navegó a otro lado, la notificación
+            // en la campana le ofrece el mismo link ("Ver resultados") sin
+            // secuestrar la página que esté viendo en ese momento.
+            onDone: () => { if (document.getElementById("process-btn")) window.location.href = resultsUrl; },
+            onError: () => { const b = document.getElementById("process-btn"); if (b) b.disabled = false; },
+        });
     });
 }
 
-// Sondea /status cada 1.5s y refleja el progreso en el overlay
-// compartido (ver showLoadingOverlay/updateLoadingOverlay arriba) --
-// misma logica de sondeo de siempre, solo cambia DONDE se pinta el
-// resultado. job.log_lines lo sigue registrando el backend (util para
-// depuracion nuestra) pero la interfaz ya no lo lee ni lo renderiza --
-// se quito el expander "Ver registro detallado" a pedido del usuario.
-//
-// window.cancelActivePoll(): el overlay de pantalla completa ya
-// bloquea el clic a la barra lateral mientras un job corre, pero el
-// botón "atrás" del navegador NO pasa por ahí (ver
-// navigateTo()/popstate en main.js) -- sin esto, volver atrás durante
-// un procesamiento dejaría el sondeo corriendo "fantasma" sobre una
-// página ya reemplazada, y el redirect final de onDone() secuestraría
-// la navegación del usuario sin aviso.
-window.cancelActivePoll = function cancelActivePoll() {};
-
-function pollJob(store, jobType, progressDiv, onDone, onError) {
-    let cancelled = false;
-    const interval = setInterval(async () => {
-        const resp = await fetch(`/api/store/${encodeURIComponent(store)}/status?job=${jobType}`);
-        const job = await resp.json();
-        if (cancelled) return; // se navegó lejos de esta página mientras la petición estaba en vuelo
-
-        const stepLabel = job.step_total > 0
-            ? `Paso ${job.step_num} de ${job.step_total}: ${job.step_description}`
-            : (job.step_description || "Procesando...");
-        const title = job.status === "running" ? "En curso" : job.status;
-        updateLoadingOverlay(title, stepLabel);
-
-        if (job.status === "done") {
-            clearInterval(interval);
-            window.cancelActivePoll = function cancelActivePoll() {};
-            updateLoadingOverlay("Completo", stepLabel);
-            hideLoadingOverlay();
-            onDone();
-        } else if (job.status === "error") {
-            clearInterval(interval);
-            window.cancelActivePoll = function cancelActivePoll() {};
-            hideLoadingOverlay();
-            progressDiv.innerHTML = window.alertHtml("error", "El procesamiento no se pudo completar. Intenta de nuevo.");
-            window.refreshIcons();
-            if (onError) onError();
-        }
-    }, 1500);
-    window.cancelActivePoll = function cancelActivePoll() {
-        cancelled = true;
-        clearInterval(interval);
-        window.cancelActivePoll = function noop() {};
-    };
-}
+// El sondeo de /status (antes pollJob() acá mismo) ahora vive a nivel
+// global en static/js/job-bell.js (window.startJobPolling) -- así
+// sobrevive a la navegación entre páginas en vez de cortarse cada vez
+// que el usuario se va de este asistente. Este archivo solo dispara el
+// job y le pasa un nombre legible + callbacks opcionales.
 
 function escapeHtmlSetup(str) {
     const div = document.createElement("div");

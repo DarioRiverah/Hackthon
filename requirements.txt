@@ -6,9 +6,9 @@ pandas
 scipy
 pyyaml
 # `lap` (linear assignment problem solver): lo requiere el tracker
-# ByteTrack de Ultralytics (pipeline/detect_and_track.py y
-# detect_hand_positions.py llaman a model.track(...)) pero ultralytics NO
-# lo declara como dependencia de instalación -- lo pide en tiempo de
+# ByteTrack de Ultralytics (pipeline/detect_and_track.py llama a
+# model.track(...)) pero ultralytics NO lo declara como dependencia de
+# instalación -- lo pide en tiempo de
 # EJECUCIÓN vía su mecanismo de "AutoUpdate" (intenta un `pip install`
 # automático la primera vez que hace falta). Confirmado dockerizando el
 # proyecto (ver DOCKER.md / docs/architecture.md): sin esto, la primera
@@ -17,9 +17,9 @@ pyyaml
 # horneada de modelos (ver Dockerfile) existe para evitar. Se fija acá
 # para que quede instalado en el build, nunca en tiempo de ejecución.
 lap>=0.5.12
-# `openvino`: runtime necesario para (a) convertir yolo26n.pt/yolov8n-pose.pt
+# `openvino`: runtime necesario para (a) convertir yolo26n-pose.pt
 # a formato OpenVINO en tiempo de build (pipeline/export_openvino.py) y
-# (b) cargar esos modelos convertidos en tiempo de inferencia
+# (b) cargar ese modelo convertido en tiempo de inferencia
 # (pipeline/detect_and_track.py:load_model()). Acelera la inferencia en
 # CPU -- ver DOCKER.md / docs/architecture.md para los tiempos reales
 # medidos. La conversión es 100% opcional/best-effort: si por lo que sea
@@ -36,6 +36,13 @@ flask
 matplotlib
 pillow
 reportlab
+
+# --- Autenticación (login con contraseña o patrón de manos, JWT) ---
+# cryptography ya llegaba como dependencia transitiva de otros paquetes,
+# se fija acá también porque dashboard/auth_crypto.py la importa
+# directamente (Fernet, para encriptar el patrón de manos guardado).
+cryptography
+pyjwt
 
 # =============================================================================
 # NOTA SOBRE GPU (OPCIONAL, NO REQUERIDO)

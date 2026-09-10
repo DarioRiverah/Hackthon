@@ -24,20 +24,40 @@ usar macros con {% call %} en vez de {% block %}, un cambio mucho más
 invasivo). Si tocás el page-hero o la zona dinámica de la sidebar acá,
 tocá el mismo bloque en layout.html.
 #}
-<title>{% block title %}Space Management{% endblock %}</title>
+<title>{% block title %}Retailytics{% endblock %}</title>
 <div id="pjax-main">
 <div class="page-hero">
-    {% if current_store and current_tienda %}
-    <p class="caption" style="margin-bottom:var(--space-2);">
-        <a href="{{ url_for('main.tienda_home', tienda=current_tienda.id) }}">{{ current_tienda.label }}</a>
-        &nbsp;/&nbsp;cámara
-    </p>
-    {% endif %}
-    {% if current_store %}<h1>{{ current_store }}</h1>
-    {% elif current_tienda %}<h1>{{ current_tienda.label }}</h1>
-    {% else %}<h1>Space Management</h1>{% endif %}
+    <div class="page-hero-top">
+        <div class="page-hero-titles">
+            {% if current_store and current_tienda %}
+            <p class="caption" style="margin-bottom:var(--space-2);">
+                <a href="{{ url_for('main.tienda_home', tienda=current_tienda.id) }}">{{ current_tienda.label }}</a>
+                &nbsp;/&nbsp;cámara
+            </p>
+            {% endif %}
+            {% if current_store %}<h1>{{ current_store }}</h1>
+            {% elif current_tienda %}<h1>{{ current_tienda.label }}</h1>
+            {% else %}<h1>Retailytics</h1>{% endif %}
+        </div>
+        <div class="page-hero-bell">
+            <button type="button" class="job-bell-toggle" id="job-bell-toggle" aria-haspopup="dialog" aria-expanded="false" aria-controls="job-bell-panel" title="Notificaciones" aria-label="Notificaciones">
+                <i data-lucide="bell" class="icon" style="--icon-size:19px;"></i>
+                <span class="job-bell-dot" id="job-bell-dot" hidden></span>
+            </button>
+            <div class="job-bell-panel" id="job-bell-panel" role="dialog" aria-label="Notificaciones" style="display:none;">
+                <div class="job-bell-header">
+                    <span><i data-lucide="bell" class="icon" style="--icon-size:16px;"></i> Notificaciones</span>
+                    <button type="button" class="job-bell-close" id="job-bell-close" aria-label="Cerrar notificaciones">
+                        <i data-lucide="x" class="icon" style="--icon-size:16px;"></i>
+                    </button>
+                </div>
+                <div class="job-bell-body" id="job-bell-body"></div>
+            </div>
+        </div>
+    </div>
     {% block hero_extra %}{% endblock %}
 </div>
+{% block section_tabs %}{% endblock %}
 {% block content %}{% endblock %}
 </div>
 <div id="pjax-sidebar">

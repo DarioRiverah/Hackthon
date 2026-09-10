@@ -2690,7 +2690,7 @@ componente) a 16px.** Todo el CSS interno usa `em`, heredado de
 16px resuelve a 90x40px exactos (confirmado con
 `getBoundingClientRect()` vía Playwright, no solo calculado a mano),
 dentro del rango pedido (79-101 x 35-45) y visualmente bien
-proporcionado junto al título "Space Management" en ambos temas (ver
+proporcionado junto al título "Retailytics" en ambos temas (ver
 capturas de verificación, punto 5).
 
 **4. Único agregado fuera del CSS "tal cual" que trajo el usuario:**
@@ -2844,7 +2844,7 @@ funcionando tras los cambios.
 ## 45. Segunda reducción de `--toggle-size` -- el piso real es la legibilidad del SVG, no el objetivo teórico
 
 El usuario confirmó que 16px (90x40px, sección 43) seguía viéndose
-grande -- casi igualaba el alto del título "Space Management" en 2
+grande -- casi igualaba el alto del título "Retailytics" en 2
 líneas (~56px). Objetivo pedido: que el interruptor termine
 aproximadamente a la altura de UNA línea de texto normal (la línea de
 `.tagline`, 18px de alto real).

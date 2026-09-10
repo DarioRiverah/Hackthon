@@ -68,8 +68,8 @@ def trim_video(input_path: str, output_path: str, start_sec: float, end_sec: flo
     alimenta el pipeline" -- esa suposición dejó de ser cierta cuando el
     asistente de configuración empezó a mostrar el recorte en un
     reproductor real (paso "1. Sube tu video"), reproduciendo el mismo
-    bug ya resuelto en pipeline/render_stitched_preview.py y los preview
-    generators de detect_and_track.py/detect_hand_positions.py."""
+    bug ya resuelto en pipeline/render_stitched_preview.py y el preview
+    generator de detect_and_track.py."""
     cap = cv2.VideoCapture(input_path)
     fps = cap.get(cv2.CAP_PROP_FPS)
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))

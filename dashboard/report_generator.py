@@ -4,9 +4,10 @@ Reporte ejecutivo ampliado en PDF.
 Reutiliza las métricas y textos YA CALCULADOS por el resto del proyecto
 (ai_insights.py para el diagnóstico/recomendaciones por zona,
 storytelling.py para el resumen narrado agregado, trends.py para la
-comparación de tendencias) para generar un documento de VARIAS páginas
-en lenguaje de negocio, listo para imprimir o compartir -- sin ningún
-modelo de IA de pago involucrado.
+comparación de tendencias, simulator.py para la recomendación automática
+de reubicación) para generar un documento de VARIAS páginas en lenguaje
+de negocio, listo para imprimir o compartir -- sin ningún modelo de IA
+de pago involucrado.
 
 Esta versión reemplaza al reporte original de una sola página (ver
 docs/architecture.md): el reporte original se construyó al inicio del
@@ -39,6 +40,7 @@ from reportlab.platypus import (
 )
 
 from ai_insights import generate_all_recommendations, generate_executive_summary
+from simulator import recommend_best_destination
 from colors import INK, COLD, SURFACE, INFO
 
 # =============================================================================
@@ -205,12 +207,23 @@ def _build_trend_table(trends_data: dict):
     return table
 
 
-def _fitted_image(path: str, max_width: float, max_height: float):
+# Ancho de contenido de la página (letter, 21.59cm - 1.8cm - 1.8cm de
+# márgenes izq/der = 17.99cm) -- IMAGE_MAX_WIDTH se queda bien por debajo
+# a propósito para que quede margen visible a los costados (antes usaba
+# 16cm, casi el ancho completo de la página, lo que hacía que cada
+# imagen se viera exagerada/apretada contra el borde).
+IMAGE_MAX_WIDTH = 11 * cm
+IMAGE_MAX_HEIGHT = 11 * cm
+
+
+def _fitted_image(path: str, max_width: float = IMAGE_MAX_WIDTH, max_height: float = IMAGE_MAX_HEIGHT):
     """Escala una imagen al PDF preservando su proporción REAL (leída
     con Pillow) -- la versión anterior asumía 16:9 a ciegas, lo que
     distorsiona cualquier heatmap/diagrama que no tenga exactamente esa
     proporción (la mayoría no la tiene: siguen la relación de aspecto
-    del video/plano original)."""
+    del video/plano original). Image() centra horizontalmente por
+    defecto (hAlign="CENTER"), así que reducir el ancho máximo también
+    deja margen visible a los costados en vez de tocar los bordes."""
     with PILImage.open(path) as im:
         iw, ih = im.size
     ratio = iw / ih if ih else 1
@@ -219,6 +232,31 @@ def _fitted_image(path: str, max_width: float, max_height: float):
         height = max_height
         width = height * ratio
     return Image(path, width=width, height=height)
+
+
+def _build_recommendation_lines(zone_summary_df, interaction_summary_df) -> list:
+    """Reutiliza simulator.recommend_best_destination() -- el MISMO
+    cálculo que alimenta el botón "Recomendarme el mejor destino" del
+    Simulador en el dashboard -- para cada zona como posible origen, sin
+    reimplementar la comparación. Solo se incluyen las zonas para las
+    que SÍ se encontró un destino candidato con mejora positiva; si para
+    una zona ninguna candidata mejora el resultado, esa zona se omite
+    sin más (mismo criterio honesto que ya aplica el simulador en
+    pantalla -- ver simulator.py)."""
+    if zone_summary_df is None or len(zone_summary_df) < 2:
+        return []
+
+    lines = []
+    for zone_id in zone_summary_df["zone_id"]:
+        rec = recommend_best_destination(zone_summary_df, interaction_summary_df, zone_id)
+        if not rec.get("ok"):
+            continue
+        cambio_pct = rec["result"]["cambio_pct"]
+        lines.append(
+            f"Si se moviera el producto de '<b>{rec['from_label']}</b>' a "
+            f"'<b>{rec['to_label']}</b>', se estima un cambio de <b>+{cambio_pct:.0f}%</b> en interacción."
+        )
+    return lines
 
 
 def generate_pdf_report(store_name: str, zone_summary_df, interaction_summary_df,
@@ -258,7 +296,7 @@ def generate_pdf_report(store_name: str, zone_summary_df, interaction_summary_df
     # =========================================================================
     # 1. Portada / encabezado
     # =========================================================================
-    story.append(Paragraph("Reporte Ejecutivo de Space Management", styles["ReportTitle"]))
+    story.append(Paragraph("Reporte Ejecutivo de Retailytics", styles["ReportTitle"]))
 
     subtitle = f"Cámara: <b>{store_name}</b>"
     if tienda_context:
@@ -316,7 +354,7 @@ def generate_pdf_report(store_name: str, zone_summary_df, interaction_summary_df
         story.append(PageBreak())
         story.append(Paragraph("Mapas de calor y trayectorias", styles["SectionHeading"]))
         for label, path in available_heatmaps.items():
-            story.append(_fitted_image(path, max_width=16 * cm, max_height=16 * cm))
+            story.append(_fitted_image(path))
             story.append(Paragraph(label, styles["ImageCaption"]))
 
     # =========================================================================
@@ -335,7 +373,28 @@ def generate_pdf_report(store_name: str, zone_summary_df, interaction_summary_df
         story.append(_build_trend_table(trends_data))
 
     # =========================================================================
-    # 7. Diagnóstico y recomendaciones -- mismo contenido de siempre,
+    # 7. Simulador: recomendación automática de reubicación -- reutiliza
+    #    recommend_best_destination() (ver docstring de
+    #    _build_recommendation_lines), la MISMA lógica del botón
+    #    "Recomendarme el mejor destino" del Simulador en pantalla.
+    #    Sección omitida por completo si ninguna zona tiene un destino
+    #    candidato con mejora positiva (nunca una recomendación forzada).
+    # =========================================================================
+    recommendation_lines = _build_recommendation_lines(zone_summary_df, interaction_summary_df)
+    if recommendation_lines:
+        story.append(Paragraph("Simulador: recomendación de reubicación", styles["SectionHeading"]))
+        story.append(Paragraph(
+            "Comparando cada zona contra todas las demás disponibles (misma lógica que el botón "
+            "\"Recomendarme el mejor destino\" del Simulador), estas son las reubicaciones con mejor "
+            "mejora estimada de interacción:", styles["Normal"],
+        ))
+        story.append(Spacer(1, 4))
+        for line in recommendation_lines:
+            story.append(Paragraph(f"&bull; {line}", styles["Normal"]))
+        story.append(Spacer(1, 8))
+
+    # =========================================================================
+    # 8. Diagnóstico y recomendaciones -- mismo contenido de siempre,
     #    solo reubicado dentro del documento ampliado.
     # =========================================================================
     story.append(PageBreak())
@@ -347,7 +406,7 @@ def generate_pdf_report(store_name: str, zone_summary_df, interaction_summary_df
         story.append(Spacer(1, 8))
 
     # =========================================================================
-    # 8. Notas de alcance -- consolidadas en un solo lugar visible, con
+    # 9. Notas de alcance -- consolidadas en un solo lugar visible, con
     #    el texto EXACTO ya validado en el dashboard (ver constantes al
     #    principio de este archivo), no redactado de nuevo.
     # =========================================================================

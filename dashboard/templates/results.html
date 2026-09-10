@@ -1,6 +1,6 @@
 {% extends partial_base %}
 {% from "_macros.html" import alert %}
-{% block title %}{{ current_store }} -- Space Management{% endblock %}
+{% block title %}{{ current_store }} -- Retailytics{% endblock %}
 
 {% block hero_extra %}
 <details class="expander">
@@ -12,8 +12,8 @@
 </details>
 {% endblock %}
 
-{% block sidebar_nav %}
-<nav class="tabs-nav">
+{% block section_tabs %}
+<nav class="tabs-nav section-tabs">
     <button class="tab-btn active" data-tab="resumen"><i data-lucide="layout-dashboard" class="icon"></i> Resumen</button>
     <button class="tab-btn" data-tab="historia"><i data-lucide="scroll-text" class="icon"></i> Historia</button>
     <button class="tab-btn" data-tab="mapas"><i data-lucide="map" class="icon"></i> Mapas y trayectorias</button>
@@ -203,16 +203,36 @@
             <div class="category-card" style="--category-color: var(--color-cold);">
                 <div class="cc-label">{{ card.zone_label }}</div>
                 <div class="cc-title">{{ card.total_interactions }} interacciones</div>
-                <div class="cc-detail">
-                    {{ card.toques_breves }} toques breves<br>
-                    {{ card.interacciones_medias }} medias<br>
-                    {{ card.interacciones_prolongadas }} prolongadas<br>
-                    {{ "%.1f"|format(card.avg_duration_seconds) }}s de duración promedio
+                <div class="cc-body">
+                    <div class="cc-detail">
+                        {{ card.toques_breves }} toques breves<br>
+                        {{ card.interacciones_medias }} medias<br>
+                        {{ card.interacciones_prolongadas }} prolongadas<br>
+                        {{ "%.1f"|format(card.avg_duration_seconds) }}s de duración promedio
+                    </div>
+                    {% if card.total_interactions > 0 %}
+                    <div class="cc-donut-wrap"><canvas class="cc-donut-canvas" data-zone-index="{{ loop.index0 }}"></canvas></div>
+                    {% endif %}
                 </div>
             </div>
             {% endfor %}
         </div>
+        <div class="legend-row">
+            <div class="legend-item"><span class="legend-swatch" style="background:var(--color-cold);"></span><span>Toques breves</span></div>
+            <div class="legend-item"><span class="legend-swatch" style="background:var(--color-zone-paso);"></span><span>Interacciones medias</span></div>
+            <div class="legend-item"><span class="legend-swatch" style="background:var(--color-hot);"></span><span>Interacciones prolongadas</span></div>
+        </div>
+        <script type="application/json" id="interaction-cards-data">{{ interaction_cards | tojson }}</script>
     </div>
+
+    {% if interaction_cards|length > 1 %}
+    <div class="panel" style="margin-top:var(--space-5);">
+        <h4>Comparación de interacciones totales por zona</h4>
+        <p class="caption">Total de interacciones físicas registradas en cada zona -- útil para ver de un
+        vistazo cuál concentra más actividad.</p>
+        <div class="chart-wrap"><canvas id="interaction-compare-chart"></canvas></div>
+    </div>
+    {% endif %}
     {% endif %}
 </section>
 
@@ -329,7 +349,10 @@
             </select>
         </div>
     </div>
-    <button class="btn btn-primary" id="sim-run-btn" data-store="{{ current_store }}"><i data-lucide="wand-sparkles" class="icon"></i> Simular</button>
+    <div class="panel-row" style="align-items:center;">
+        <button class="btn btn-primary" id="sim-run-btn" data-store="{{ current_store }}"><i data-lucide="wand-sparkles" class="icon"></i> Simular</button>
+        <button class="btn" id="sim-recommend-btn" data-store="{{ current_store }}"><i data-lucide="sparkles" class="icon"></i> Recomendarme el mejor destino</button>
+    </div>
     <div id="sim-result" style="margin-top:var(--space-4);"></div>
     {% endif %}
 </section>

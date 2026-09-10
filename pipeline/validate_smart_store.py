@@ -1,12 +1,13 @@
 """
 Validación cruzada contra el dataset smart-store-znibq (Roboflow).
 
-Corre nuestros propios modelos YA ENTRENADOS (YOLO26 para personas,
-YOLOv8-pose para manos) sobre las imágenes de este dataset, y compara
-contra sus anotaciones de verdad (ground truth) para medir con números
-reales -- no solo impresión visual -- qué tan bien generalizan a una
-vista lateral/de esquina, distinta a la vista cenital de MERL con la
-que validamos todo el resto del proyecto.
+Corre nuestro propio modelo YA ENTRENADO (YOLO26-pose, el mismo que usa
+pipeline/detect_and_track.py para cuerpo Y mano en una sola pasada)
+sobre las imágenes de este dataset, y compara contra sus anotaciones de
+verdad (ground truth) para medir con números reales -- no solo
+impresión visual -- qué tan bien generaliza a una vista lateral/de
+esquina, distinta a la vista cenital de MERL con la que validamos todo
+el resto del proyecto.
 
 Esto es una prueba de UNA SOLA IMAGEN a la vez (sin tracking, ya que
 este dataset son imágenes sueltas, no video) -- valida la calidad de
@@ -40,8 +41,7 @@ import cv2
 import yaml
 from ultralytics import YOLO
 
-BODY_MODEL_NAME = "yolo26n.pt"
-POSE_MODEL_NAME = "yolov8n-pose.pt"
+POSE_MODEL_NAME = "yolo26n-pose.pt"
 KEYPOINT_LEFT_WRIST = 9
 KEYPOINT_RIGHT_WRIST = 10
 
@@ -144,8 +144,7 @@ def main():
 
     print(f"Validando contra {len(image_files)} imágenes de '{args.split}'...")
 
-    body_model = YOLO(BODY_MODEL_NAME)
-    pose_model = YOLO(POSE_MODEL_NAME)
+    model = YOLO(POSE_MODEL_NAME)
 
     total_tp, total_fp, total_fn = 0, 0, 0
     hand_boxes_total = 0
@@ -164,9 +163,12 @@ def main():
         gt_person_boxes = [(x1, y1, x2, y2) for cid, x1, y1, x2, y2 in gt_all if cid == person_class_id]
         gt_hand_boxes = [(x1, y1, x2, y2) for cid, x1, y1, x2, y2 in gt_all if cid in hand_class_ids]
 
+        # Una sola pasada de YOLO26-pose entrega tanto la caja de persona
+        # completa (validación 1) como los keypoints de muñeca (validación 2).
+        result = model.predict(img, classes=[0], conf=args.conf, verbose=False)[0]
+
         # --- Validación 1: detección de personas ---
-        body_result = body_model.predict(img, classes=[0], conf=args.conf, verbose=False)[0]
-        pred_person_boxes = [tuple(box) for box in body_result.boxes.xyxy.cpu().numpy()] if body_result.boxes is not None else []
+        pred_person_boxes = [tuple(box) for box in result.boxes.xyxy.cpu().numpy()] if result.boxes is not None else []
 
         tp, fp, fn = match_boxes(gt_person_boxes, pred_person_boxes, args.iou_threshold)
         total_tp += tp
@@ -175,11 +177,10 @@ def main():
 
         # --- Validación 2: plausibilidad de mano/interacción ---
         if gt_hand_boxes:
-            pose_result = pose_model.predict(img, conf=args.conf, verbose=False)[0]
             wrist_points = []
-            if pose_result.keypoints is not None:
-                kpts_xy = pose_result.keypoints.xy.cpu().numpy()
-                kpts_conf = pose_result.keypoints.conf.cpu().numpy() if pose_result.keypoints.conf is not None else None
+            if result.keypoints is not None:
+                kpts_xy = result.keypoints.xy.cpu().numpy()
+                kpts_conf = result.keypoints.conf.cpu().numpy() if result.keypoints.conf is not None else None
                 for i in range(len(kpts_xy)):
                     for kp_idx in (KEYPOINT_LEFT_WRIST, KEYPOINT_RIGHT_WRIST):
                         x, y = kpts_xy[i][kp_idx]

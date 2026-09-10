@@ -1,0 +1,8 @@
+id_persona,zone_id,start_time,end_time,duration_seconds,classification
+1,Frutas(derecha),0.0,85.446,85.446,se_detiene
+2,Frutas(izquierda),2.308,3.964,1.656,pasa_de_largo
+2,Frutas(izquierda),11.59,11.741,0.151,pasa_de_largo
+2,Frutas(izquierda),17.36,18.966,1.606,pasa_de_largo
+2,Frutas(izquierda),26.642,26.793,0.151,pasa_de_largo
+2,Verduras,32.463,33.015,0.552,pasa_de_largo
+2,Verduras,42.698,43.451,0.753,pasa_de_largo
